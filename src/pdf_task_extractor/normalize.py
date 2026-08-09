@@ -136,6 +136,7 @@ def apply_group_inheritance(records: list) -> list:
 
 
 if __name__ == "__main__":
+    import json
     import sys
 
     import pandas as pd
@@ -147,5 +148,11 @@ if __name__ == "__main__":
     output_path = sys.argv[2] if len(sys.argv) > 2 else "data/output/normalized.csv"
 
     normalized = apply_group_inheritance(extract_from_pdf(pdf_path))
-    pd.DataFrame(normalized).to_csv(output_path, index=False, encoding="utf-8-sig")
+
+    if output_path.lower().endswith(".json"):
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(normalized, f, ensure_ascii=False, indent=2)
+    else:
+        pd.DataFrame(normalized).to_csv(output_path, index=False, encoding="utf-8-sig")
+
     print(f"Da xuat {len(normalized)} record ra {output_path}", file=sys.stderr)
