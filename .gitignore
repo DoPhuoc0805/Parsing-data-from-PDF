@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Output data (giữ lại cấu trúc thư mục, bỏ qua nội dung sinh ra)
+data/output/*
+!data/output/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db
