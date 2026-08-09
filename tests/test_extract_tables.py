@@ -27,8 +27,18 @@ def test_kh277_extracts_expected_number_of_rows():
     records = extract_from_pdf(str(KH277_PDF))
     # Gồm cả dòng nhóm cha (tt rỗng, chi_tiet là số nhóm) và dòng chi tiết
     # (tt là số thứ tự chi tiết, chi_tiet là a)/b)/c)...) — đã đối chiếu bằng
-    # tay khớp với nội dung Phụ lục gốc.
-    assert len(records) == 42
+    # tay khớp với nội dung Phụ lục gốc. 42 dòng vật lý trừ đi 1 dòng bị PDF
+    # ngắt trang (đã gộp lại vào dòng 14/a ngay trước) = 41.
+    assert len(records) == 41
+
+
+def test_kh277_merges_row_split_across_page_break():
+    records = extract_from_pdf(str(KH277_PDF))
+    record_14 = next(r for r in records if r.get("tt") == "14")
+    # Phan dau o cuoi trang truoc, phan sau ("thoi gian giai quyet...") bi
+    # PDF tach sang dau trang ke tiep nhu 1 dong rieng - phai duoc gop lai.
+    assert "Phê duyệt phương án tái cấu trúc" in record_14["san_pham"]
+    assert "thời gian giải quyết, 50% thành" in record_14["san_pham"]
 
 
 def test_kh277_header_rows_are_not_included_as_data():

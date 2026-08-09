@@ -54,11 +54,11 @@ def test_group_2_uses_its_own_group_number_not_global_tt():
     assert _by_ma(normalized, "2b")["ten_nhiem_vu"].startswith("Đối với khoảng 950.000")
 
 
-def test_orphan_row_gets_no_task_code():
+def test_no_row_is_left_without_a_task_code():
+    # Dong bi ngat trang (khong co tt/chi_tiet) da duoc gop lai o extract_tables,
+    # nen sau normalize khong con dong nao thieu ma_nhiem_vu.
     normalized = _normalized_kh277()
-    orphans = [r for r in normalized if r["ma_nhiem_vu"] is None]
-    assert len(orphans) == 1
-    assert "thời gian giải quyết" in orphans[0]["san_pham"]
+    assert all(r["ma_nhiem_vu"] is not None for r in normalized)
 
 
 def test_group_with_shared_lead_unit_is_inherited():
