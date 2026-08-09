@@ -38,7 +38,7 @@ def test_group_with_shared_coordination_and_deadline_is_inherited():
 
     assert len(children) == 8
     for record in children:
-        assert record["don_vi_phoi_hop"] == "Sở Khoa học và\nCông nghệ"
+        assert record["don_vi_phoi_hop"] == "Sở Khoa học và Công nghệ"
         assert record["thoi_han"] == "30/8/2026"
         assert record["nhom_so_thu_tu"] == "1"
 
@@ -63,7 +63,7 @@ def test_no_row_is_left_without_a_task_code():
 
 def test_group_with_shared_lead_unit_is_inherited():
     normalized = _normalized_kh277()
-    expected_chu_tri = "Các Sở, ban, ngành;\nUBND các xã,\nphường"
+    expected_chu_tri = "Các Sở, ban, ngành; UBND các xã, phường"
     assert _by_ma(normalized, "12a")["don_vi_chu_tri"] == expected_chu_tri
     assert _by_ma(normalized, "12b")["don_vi_chu_tri"] == expected_chu_tri
 
@@ -79,22 +79,37 @@ def test_standalone_task_uses_itself_as_its_own_group():
     record = _by_ma(normalized, "8")
     assert record["nhom_nhiem_vu"] == record["ten_nhiem_vu"]
     assert record["nhom_so_thu_tu"] == "8"
-    assert record["don_vi_chu_tri"] == "Sở Văn hóa và\nThể thao"
+    assert record["don_vi_chu_tri"] == "Sở Văn hóa và Thể thao"
+
+
+def test_wrapped_lines_are_rejoined_but_bullets_are_kept_separate():
+    normalized = _normalized_kh277()
+    record = _by_ma(normalized, "4a")
+    lines = record["san_pham"].split("\n")
+
+    # 3 gach dau dong that su, moi gach lien mach khong con bi ngat giua dong.
+    assert len(lines) == 3
+    assert all(line.startswith("-") for line in lines)
+    assert "thời gian giải quyết, 50% thành phần hồ sơ." in lines[-1]
 
 
 _ADDED_FIELDS = ["nhom_nhiem_vu", "nhom_so_thu_tu", "ma_nhiem_vu"]
 _DROPPED_FIELDS = ["tt", "chi_tiet"]
 
 
-def test_cv6582_records_unchanged_aside_from_added_and_dropped_fields():
+def test_cv6582_records_have_no_group_context():
     raw = extract_from_pdf(str(CV6582_PDF))
     normalized = apply_group_inheritance(raw)
 
     assert len(normalized) == len(raw) == 12
-    for original, result in zip(raw, normalized):
+    for result in normalized:
         assert all(result[field] is None for field in _ADDED_FIELDS)
         assert all(field not in result for field in _DROPPED_FIELDS)
 
-        expected = {k: v for k, v in original.items() if k not in _DROPPED_FIELDS}
-        actual = {k: v for k, v in result.items() if k not in _ADDED_FIELDS}
-        assert actual == expected
+
+def test_cv6582_wrapped_unit_names_are_rejoined():
+    normalized = apply_group_inheritance(extract_from_pdf(str(CV6582_PDF)))
+    record = normalized[0]
+    # Ten don vi bi PDF wrap chu (vd "Sở KHCN,\nTập đoàn\nViettel") duoc noi lien.
+    assert "\n" not in record["don_vi_phoi_hop"]
+    assert record["don_vi_phoi_hop"] == "Sở KHCN, Tập đoàn Viettel"

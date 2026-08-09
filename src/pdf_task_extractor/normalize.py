@@ -29,12 +29,16 @@ Với nhiệm vụ độc lập (không có dòng con), "nhom_nhiem_vu" và
 "nhom_so_thu_tu" được điền bằng chính tên/số của nó — vì nó tự là 1 nhóm
 chỉ gồm 1 nhiệm vụ, không phải "không thuộc nhóm nào".
 
-Cột "tt" và "chi_tiet" chỉ dùng nội bộ để phân loại/ghép mã, không xuất
-hiện trong kết quả cuối (đã có "ma_nhiem_vu" thay thế).
 
 Chưa xử lý ở bước này: dòng "mồ côi" do PDF tách rời 1 câu bị wrap thành
 dòng riêng (không khớp mẫu số trần lẫn chữ cái) — các dòng này đi qua
 nguyên trạng, "ma_nhiem_vu" của chúng là None vì không xác định được.
+
+Cuối cùng, các field text được nối lại dòng: PDF wrap chữ giữa dòng (vd
+"Sở\nKHCN") không mang ý nghĩa xuống dòng thật nên được nối bằng khoảng
+trắng; riêng dòng nào bắt đầu bằng "-" (gạch đầu dòng thật, dùng liệt kê
+nhiều ý trong 1 ô) được giữ nguyên xuống dòng để không mất định dạng danh
+sách.
 """
 
 from __future__ import annotations
@@ -42,9 +46,18 @@ from __future__ import annotations
 import re
 
 INHERITABLE_FIELDS = ["don_vi_chu_tri", "don_vi_phoi_hop", "san_pham", "thoi_han"]
+TEXT_FIELDS_TO_CLEAN = [
+    "ten_nhiem_vu",
+    "don_vi_chu_tri",
+    "don_vi_phoi_hop",
+    "san_pham",
+    "thoi_han",
+    "nhom_nhiem_vu",
+]
 
 _BARE_NUMBER = re.compile(r"^\d+$")
 _LETTER_CHI_TIET = re.compile(r"^([a-zđ])\)$")
+_BULLET_PREFIX = re.compile(r"^-\s*")
 
 
 def _is_bare_number(chi_tiet) -> bool:
@@ -54,6 +67,22 @@ def _is_bare_number(chi_tiet) -> bool:
 def _letter_suffix(chi_tiet):
     match = _LETTER_CHI_TIET.match((chi_tiet or "").strip())
     return match.group(1) if match else None
+
+
+def _rejoin_wrapped_lines(text):
+    """Nối các dòng bị PDF wrap chữ giữa dòng thành 1 dòng liền mạch, giữ
+    nguyên các dòng thực sự là gạch đầu dòng riêng (bắt đầu bằng "-")."""
+    if not text:
+        return text
+
+    merged = []
+    for line in text.split("\n"):
+        line = line.strip()
+        if merged and not _BULLET_PREFIX.match(line):
+            merged[-1] = f"{merged[-1]} {line}".strip()
+        else:
+            merged.append(line)
+    return "\n".join(merged)
 
 
 def apply_group_inheritance(records: list) -> list:
@@ -96,6 +125,11 @@ def apply_group_inheritance(records: list) -> list:
 
         new_record.pop("tt", None)
         new_record.pop("chi_tiet", None)
+
+        for field in TEXT_FIELDS_TO_CLEAN:
+            if field in new_record:
+                new_record[field] = _rejoin_wrapped_lines(new_record[field])
+
         result.append(new_record)
 
     return result
