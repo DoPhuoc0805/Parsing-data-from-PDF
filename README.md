@@ -5,7 +5,7 @@ Công cụ trích xuất bảng phân công nhiệm vụ (nhiệm vụ → đơn
 ## Mục tiêu
 
 - **Input:** File PDF chứa bảng phân công nhiệm vụ (vd: Phụ lục kế hoạch triển khai chuyển đổi số).
-- **Output:** File CSV, mỗi dòng là 1 nhiệm vụ với: mã nhiệm vụ, tên nhiệm vụ, đơn vị chủ trì, đơn vị phối hợp, sản phẩm (nếu có), thời hạn, tên nhóm nhiệm vụ.
+- **Output:** File CSV hoặc JSON, mỗi dòng/phần tử là 1 nhiệm vụ với: mã nhiệm vụ, tên nhiệm vụ, đơn vị chủ trì, đơn vị phối hợp, sản phẩm (nếu có), thời hạn, tên nhóm nhiệm vụ.
 
 ## Trạng thái hiện tại
 
@@ -15,7 +15,7 @@ Pipeline gồm 3 bước, cả 3 đã code xong và có test:
 |---|---|---|
 | `src/pdf_task_extractor/locate_tables.py` | Xác định trang/vị trí bảng nhiệm vụ trong PDF, ánh xạ cột theo tên trường chuẩn | ✅ Xong |
 | `src/pdf_task_extractor/extract_tables.py` | Trích xuất dữ liệu thô, gộp bảng bị ngắt qua nhiều trang (kể cả dòng bị PDF cắt ngang do rơi đúng ranh giới trang) | ✅ Xong |
-| `src/pdf_task_extractor/normalize.py` | Loại dòng nhóm cha, kế thừa cột dùng chung xuống dòng con, ghép mã nhiệm vụ, **xuất CSV** | ✅ Xong |
+| `src/pdf_task_extractor/normalize.py` | Loại dòng nhóm cha, kế thừa cột dùng chung xuống dòng con, ghép mã nhiệm vụ, **xuất CSV hoặc JSON** | ✅ Xong |
 
 Các file sau **mới chỉ có docstring, chưa có code** — chưa dùng được:
 
@@ -29,14 +29,14 @@ Hiện tại `normalize.py` đang tạm đảm nhiệm luôn việc "chạy toà
 
 ```
 data/raw/         PDF gốc đầu vào (2 file mẫu: kh-cao-diem-100-ngay-c-s-tp-hn.pdf, CV 6582.pdf)
-data/output/      Kết quả xuất ra (CSV, không commit vào git)
+data/output/      Kết quả xuất ra (CSV/JSON, không commit vào git)
 src/pdf_task_extractor/
     locate_tables.py   Bước 1
     extract_tables.py  Bước 2
-    normalize.py       Bước 3 (+ CLI xuất CSV)
+    normalize.py       Bước 3 (+ CLI xuất CSV hoặc JSON)
     validate.py        (chưa code)
     pipeline.py        (chưa code)
-tests/                 Unit test cho 3 module đã xong (21 test)
+tests/                 Unit test cho 3 module đã xong (23 test)
 scripts/run_extract.py (chưa code)
 notebooks/exploration.ipynb
 ```
@@ -49,14 +49,28 @@ pip install -r requirements.txt
 
 ## Chạy thử
 
-Chạy toàn bộ 3 bước và xuất CSV kết quả cuối cùng:
+Chạy toàn bộ 3 bước và xuất kết quả cuối cùng:
 
 ```bash
 python -m src.pdf_task_extractor.normalize "data/raw/kh-cao-diem-100-ngay-c-s-tp-hn.pdf" "data/output/kh277_normalized.csv"
 python -m src.pdf_task_extractor.normalize "data/raw/CV 6582.pdf" "data/output/cv6582_normalized.csv"
 ```
 
-Tham số 1: file PDF input. Tham số 2 (tùy chọn): đường dẫn CSV output, mặc định `data/output/normalized.csv`.
+Tham số 1: file PDF input. Tham số 2 (tùy chọn): đường dẫn file output, mặc định `data/output/normalized.csv`.
+
+**Định dạng output được chọn tự động theo đuôi file** truyền vào tham số 2 — không cần thêm flag nào khác:
+
+- Đuôi `.csv` (hoặc bỏ trống tham số 2) → xuất CSV bằng `pandas`, giữ nguyên như trước.
+- Đuôi `.json` → xuất JSON (dùng `json.dump` chuẩn, không cần cài thêm thư viện).
+
+Ví dụ xuất JSON:
+
+```bash
+python -m src.pdf_task_extractor.normalize "data/raw/kh-cao-diem-100-ngay-c-s-tp-hn.pdf" "data/output/kh277_normalized.json"
+python -m src.pdf_task_extractor.normalize "data/raw/CV 6582.pdf" "data/output/cv6582_normalized.json"
+```
+
+Nên ưu tiên dùng JSON khi cần xử lý tiếp bằng code (giữ đúng kiểu dữ liệu, `None` hiện thành `null` thay vì `NaN` gây khó đọc khi mở CSV bằng Excel/Jupyter) — dùng CSV khi cần mở trực tiếp bằng Excel để xem/lọc bằng tay.
 
 Muốn xem kết quả trung gian từng bước (in ra màn hình, không lưu file) để debug:
 
@@ -84,7 +98,7 @@ python -m pytest tests/ -v
 | `nhom_nhiem_vu` | Tên nhóm nhiệm vụ lớn mà dòng này thuộc về (nhiệm vụ độc lập thì bằng chính `ten_nhiem_vu` của nó) |
 | `nhom_so_thu_tu` | Số hiệu nhóm dạng số thuần, tiện sort/filter |
 
-Cột `tt`, `chi_tiet` chỉ dùng nội bộ trong quá trình xử lý, không xuất hiện trong CSV cuối cùng.
+Cột `tt`, `chi_tiet` chỉ dùng nội bộ trong quá trình xử lý, không xuất hiện trong CSV/JSON cuối cùng.
 
 ## Dữ liệu mẫu
 
