@@ -26,12 +26,19 @@ from typing import Optional
 import pdfplumber
 
 CANONICAL_FIELDS = {
+    "tt": ["TT"],
+    "chi_tiet": ["Chi tiết"],
     "ten_nhiem_vu": ["Tên nhiệm vụ", "Công việc"],
     "don_vi_chu_tri": ["Đơn vị chủ trì", "Đơn vị thực hiện"],
     "don_vi_phoi_hop": ["Đơn vị phối hợp"],
     "san_pham": ["Sản phẩm"],
     "thoi_han": ["Thời hạn", "Số ngày dự kiến"],
 }
+
+# Từ khóa ngắn (vd "TT") dễ khớp nhầm vào chuỗi con của từ khác (vd "Viettel"
+# chứa "tt") nếu dùng kiểu so khớp substring như các từ khóa dài. Với từ khóa
+# có độ dài <= ngưỡng này, yêu cầu khớp CHÍNH XÁC toàn bộ nội dung ô.
+EXACT_MATCH_LENGTH_THRESHOLD = 3
 
 REQUIRED_FIELDS = ["don_vi_chu_tri", "don_vi_phoi_hop"]
 
@@ -61,6 +68,8 @@ class TableLocation:
     header_row: list
     is_continuation: bool
     column_mapping: dict  # {vị trí cột: tên trường chuẩn}
+    header_row_count: int  # số dòng đầu của rows là header, cần bỏ qua khi lấy dữ liệu
+    rows: list  # toàn bộ dữ liệu thô (kể cả header) của bảng trên trang này
 
 
 def _clean(cell: Optional[str]) -> str:
@@ -70,6 +79,19 @@ def _clean(cell: Optional[str]) -> str:
 def _normalize_header_text(cell: Optional[str]) -> str:
     """Gộp xuống dòng trong header (do wrap chữ) thành khoảng trắng để so khớp từ khóa."""
     return " ".join(_clean(cell).split())
+
+
+def _matches_synonym(text: str, synonym: str) -> bool:
+    """So khớp text (đã lower) với 1 từ khóa (chưa lower).
+
+    Từ khóa ngắn (vd "TT") yêu cầu khớp CHÍNH XÁC để tránh khớp nhầm vào
+    chuỗi con của từ khác (vd "Viettel" chứa "tt"). Từ khóa dài hơn dùng
+    khớp substring như trước.
+    """
+    syn_lower = synonym.lower()
+    if len(syn_lower) <= EXACT_MATCH_LENGTH_THRESHOLD:
+        return text == syn_lower
+    return syn_lower in text
 
 
 def _match_header_fields(rows: list) -> dict:
@@ -88,7 +110,7 @@ def _match_header_fields(rows: list) -> dict:
             if not text:
                 continue
             for field, synonyms in CANONICAL_FIELDS.items():
-                if any(syn.lower() in text for syn in synonyms):
+                if any(_matches_synonym(text, syn) for syn in synonyms):
                     mapping[col_index] = field
                     break
     return mapping
@@ -97,6 +119,16 @@ def _match_header_fields(rows: list) -> dict:
 def _is_target_header(column_mapping: dict) -> bool:
     matched_fields = set(column_mapping.values())
     return all(field in matched_fields for field in REQUIRED_FIELDS)
+
+
+def _count_header_rows(rows: list) -> int:
+    """Số dòng đầu (trong cửa sổ đã quét) thực sự là header, dựa trên số dòng
+    liên tiếp từ đầu có ít nhất 1 ô khớp CANONICAL_FIELDS."""
+    last_contributing_row = -1
+    for row_index, row in enumerate(rows):
+        if _match_header_fields([row]):
+            last_contributing_row = row_index
+    return last_contributing_row + 1
 
 
 def find_target_tables(pdf_path: str, min_columns: int = MIN_COLUMNS) -> list:
@@ -129,6 +161,9 @@ def find_target_tables(pdf_path: str, min_columns: int = MIN_COLUMNS) -> list:
                 )
 
                 if is_header or is_continuation:
+                    header_row_count = (
+                        _count_header_rows(data[:HEADER_ROW_SCAN_LIMIT]) if is_header else 0
+                    )
                     locations.append(
                         TableLocation(
                             page_index=page_index,
@@ -138,6 +173,8 @@ def find_target_tables(pdf_path: str, min_columns: int = MIN_COLUMNS) -> list:
                             header_row=header_row,
                             is_continuation=is_continuation,
                             column_mapping=column_mapping if is_header else (last_target_mapping or {}),
+                            header_row_count=header_row_count,
+                            rows=data,
                         )
                     )
                     last_target_cols = n_cols
