@@ -25,6 +25,13 @@ hiệu của nó (vd "8"). Field "nhom_so_thu_tu" giữ số hiệu nhóm dạng
 thuần (tách riêng khỏi "nhom_nhiem_vu" là tên nhóm dạng câu) để dễ
 sort/group.
 
+Với nhiệm vụ độc lập (không có dòng con), "nhom_nhiem_vu" và
+"nhom_so_thu_tu" được điền bằng chính tên/số của nó — vì nó tự là 1 nhóm
+chỉ gồm 1 nhiệm vụ, không phải "không thuộc nhóm nào".
+
+Cột "tt" và "chi_tiet" chỉ dùng nội bộ để phân loại/ghép mã, không xuất
+hiện trong kết quả cuối (đã có "ma_nhiem_vu" thay thế).
+
 Chưa xử lý ở bước này: dòng "mồ côi" do PDF tách rời 1 câu bị wrap thành
 dòng riêng (không khớp mẫu số trần lẫn chữ cái) — các dòng này đi qua
 nguyên trạng, "ma_nhiem_vu" của chúng là None vì không xác định được.
@@ -69,10 +76,11 @@ def apply_group_inheritance(records: list) -> list:
         letter = _letter_suffix(chi_tiet)
 
         if is_top_level:
-            # Nhiệm vụ độc lập (không có dòng con) — không thuộc nhóm nào.
-            new_record["nhom_nhiem_vu"] = None
-            new_record["nhom_so_thu_tu"] = None
-            new_record["ma_nhiem_vu"] = (chi_tiet or "").strip()
+            # Nhiệm vụ độc lập (không có dòng con) — tự nó là 1 nhóm.
+            ma = (chi_tiet or "").strip()
+            new_record["nhom_nhiem_vu"] = record.get("ten_nhiem_vu")
+            new_record["nhom_so_thu_tu"] = ma
+            new_record["ma_nhiem_vu"] = ma
             current_group = None
         elif current_group is not None:
             for field in INHERITABLE_FIELDS:
@@ -86,6 +94,8 @@ def apply_group_inheritance(records: list) -> list:
             new_record["nhom_so_thu_tu"] = None
             new_record["ma_nhiem_vu"] = None
 
+        new_record.pop("tt", None)
+        new_record.pop("chi_tiet", None)
         result.append(new_record)
 
     return result
