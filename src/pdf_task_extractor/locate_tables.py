@@ -37,6 +37,11 @@ REQUIRED_FIELDS = ["don_vi_chu_tri", "don_vi_phoi_hop"]
 
 MIN_COLUMNS = 4
 
+# Header có thể trải qua nhiều dòng do ô bị chia tầng (vd "Stt" ở dòng 1,
+# "TT"/"Chi tiết" ở dòng 2) — quét 2 dòng đầu để không bỏ sót từ khóa rơi
+# xuống dòng thứ 2.
+HEADER_ROW_SCAN_LIMIT = 2
+
 # snap_x_tolerance lớn hơn mặc định để gộp các đường kẻ dọc bị lệch nhẹ
 # (artifact khi xuất PDF từ Word) — nếu không, một cột logic có thể bị tách
 # nhầm thành nhiều cột do các đường kẻ thừa sát nhau.
@@ -67,15 +72,25 @@ def _normalize_header_text(cell: Optional[str]) -> str:
     return " ".join(_clean(cell).split())
 
 
-def _match_header_fields(header_row: list) -> dict:
-    """Ánh xạ {vị trí cột: trường chuẩn} cho các cột khớp CANONICAL_FIELDS."""
+def _match_header_fields(rows: list) -> dict:
+    """Ánh xạ {vị trí cột: trường chuẩn} cho các cột khớp CANONICAL_FIELDS.
+
+    Nhận vào nhiều dòng (header có thể trải qua 2 dòng do ô bị chia tầng);
+    quét theo thứ tự dòng, cột nào đã khớp ở dòng trước thì không ghi đè
+    bởi dòng sau. So khớp không phân biệt hoa/thường.
+    """
     mapping = {}
-    for col_index, cell in enumerate(header_row):
-        text = _normalize_header_text(cell)
-        for field, synonyms in CANONICAL_FIELDS.items():
-            if any(syn in text for syn in synonyms):
-                mapping[col_index] = field
-                break
+    for row in rows:
+        for col_index, cell in enumerate(row):
+            if col_index in mapping:
+                continue
+            text = _normalize_header_text(cell).lower()
+            if not text:
+                continue
+            for field, synonyms in CANONICAL_FIELDS.items():
+                if any(syn.lower() in text for syn in synonyms):
+                    mapping[col_index] = field
+                    break
     return mapping
 
 
@@ -105,7 +120,7 @@ def find_target_tables(pdf_path: str, min_columns: int = MIN_COLUMNS) -> list:
                     continue
 
                 header_row = [_clean(c) for c in data[0]]
-                column_mapping = _match_header_fields(data[0])
+                column_mapping = _match_header_fields(data[:HEADER_ROW_SCAN_LIMIT])
                 is_header = _is_target_header(column_mapping)
                 is_continuation = (
                     not is_header
@@ -122,7 +137,7 @@ def find_target_tables(pdf_path: str, min_columns: int = MIN_COLUMNS) -> list:
                             n_cols=n_cols,
                             header_row=header_row,
                             is_continuation=is_continuation,
-                            column_mapping=column_mapping if is_header else last_target_mapping,
+                            column_mapping=column_mapping if is_header else (last_target_mapping or {}),
                         )
                     )
                     last_target_cols = n_cols

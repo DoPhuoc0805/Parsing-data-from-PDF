@@ -2,7 +2,11 @@
 
 from pathlib import Path
 
-from src.pdf_task_extractor.locate_tables import find_target_tables, get_target_page_range
+from src.pdf_task_extractor.locate_tables import (
+    _match_header_fields,
+    find_target_tables,
+    get_target_page_range,
+)
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "raw"
 KH277_PDF = DATA_DIR / "kh-cao-diem-100-ngay-c-s-tp-hn.pdf"
@@ -42,3 +46,23 @@ def test_all_detected_tables_have_required_column_mapping():
         for loc in locations:
             assert "don_vi_chu_tri" in loc.column_mapping.values()
             assert "don_vi_phoi_hop" in loc.column_mapping.values()
+
+
+def test_match_header_fields_finds_required_field_on_second_row():
+    # Mô phỏng header 2 tầng, nơi "Đơn vị chủ trì" rơi xuống dòng thứ 2
+    row0 = ["Stt", None, "Tên nhiệm vụ", None, "Đơn vị phối hợp", "Sản phẩm", "Thời hạn"]
+    row1 = ["TT", "Chi tiết", None, "Đơn vị chủ trì", None, None, None]
+
+    mapping = _match_header_fields([row0, row1])
+
+    assert mapping[3] == "don_vi_chu_tri"
+    assert mapping[4] == "don_vi_phoi_hop"
+
+
+def test_match_header_fields_is_case_insensitive():
+    row0 = ["TT", "CÔNG VIỆC", "ĐƠN VỊ CHỦ TRÌ", "ĐƠN VỊ PHỐI HỢP"]
+
+    mapping = _match_header_fields([row0])
+
+    assert mapping[2] == "don_vi_chu_tri"
+    assert mapping[3] == "don_vi_phoi_hop"
