@@ -29,11 +29,32 @@ def test_group_with_shared_coordination_and_deadline_is_inherited():
     for record in children:
         assert record["don_vi_phoi_hop"] == "Sở Khoa học và\nCông nghệ"
         assert record["thoi_han"] == "30/8/2026"
+        assert record["nhom_so_thu_tu"] == "1"
 
     # Don vi chu tri van rieng theo tung dong con, khong bi ghi de.
     chu_tri_values = {r["tt"]: r["don_vi_chu_tri"] for r in children}
     assert chu_tri_values["1"] == "Sở Tài chính"
     assert chu_tri_values["7"] == "Sở Y tế"
+
+    # Ma nhiem vu ghep dung so nhom + chu cai con, khong dung "tt" toan cuc.
+    ma_values = {r["tt"]: r["ma_nhiem_vu"] for r in children}
+    assert ma_values["1"] == "1a"
+    assert ma_values["8"] == "1h"
+
+
+def test_group_2_uses_its_own_group_number_not_global_tt():
+    normalized = _normalized_kh277()
+    record_9 = next(r for r in normalized if r["tt"] == "9")
+    record_10 = next(r for r in normalized if r["tt"] == "10")
+
+    assert record_9["ma_nhiem_vu"] == "2a"
+    assert record_10["ma_nhiem_vu"] == "2b"
+
+
+def test_orphan_row_gets_no_task_code():
+    normalized = _normalized_kh277()
+    orphan = next(r for r in normalized if not r.get("tt") and not r.get("chi_tiet"))
+    assert orphan["ma_nhiem_vu"] is None
 
 
 def test_group_with_shared_lead_unit_is_inherited():
@@ -59,15 +80,20 @@ def test_standalone_task_has_no_group_context():
     normalized = _normalized_kh277()
     record_28 = next(r for r in normalized if r["tt"] == "28")
     assert record_28["nhom_nhiem_vu"] is None
+    assert record_28["nhom_so_thu_tu"] is None
+    assert record_28["ma_nhiem_vu"] == "8"
     assert record_28["don_vi_chu_tri"] == "Sở Văn hóa và\nThể thao"
 
 
-def test_cv6582_records_unchanged_aside_from_group_field():
+_ADDED_FIELDS = ["nhom_nhiem_vu", "nhom_so_thu_tu", "ma_nhiem_vu"]
+
+
+def test_cv6582_records_unchanged_aside_from_added_fields():
     raw = extract_from_pdf(str(CV6582_PDF))
     normalized = apply_group_inheritance(raw)
 
     assert len(normalized) == len(raw) == 12
     for original, result in zip(raw, normalized):
-        assert result["nhom_nhiem_vu"] is None
-        without_group_field = {k: v for k, v in result.items() if k != "nhom_nhiem_vu"}
-        assert without_group_field == original
+        assert all(result[field] is None for field in _ADDED_FIELDS)
+        without_added_fields = {k: v for k, v in result.items() if k not in _ADDED_FIELDS}
+        assert without_added_fields == original
