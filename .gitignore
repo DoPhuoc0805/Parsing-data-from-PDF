@@ -8,6 +8,9 @@ venv/
 # Jupyter
 .ipynb_checkpoints/
 
+# Pytest
+.pytest_cache/
+
 # Output data (giữ lại cấu trúc thư mục, bỏ qua nội dung sinh ra)
 data/output/*
 !data/output/.gitkeep
