@@ -135,11 +135,22 @@ def apply_group_inheritance(records: list) -> list:
     return result
 
 
-if __name__ == "__main__":
+def export_records(records: list, output_path: str) -> None:
+    """Xuất danh sách record ra file. Định dạng chọn theo đuôi output_path:
+    ".json" -> JSON, còn lại -> CSV (qua pandas)."""
     import json
-    import sys
 
-    import pandas as pd
+    if output_path.lower().endswith(".json"):
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(records, f, ensure_ascii=False, indent=2)
+    else:
+        import pandas as pd
+
+        pd.DataFrame(records).to_csv(output_path, index=False, encoding="utf-8-sig")
+
+
+if __name__ == "__main__":
+    import sys
 
     from .extract_tables import extract_from_pdf
 
@@ -148,11 +159,5 @@ if __name__ == "__main__":
     output_path = sys.argv[2] if len(sys.argv) > 2 else "data/output/normalized.csv"
 
     normalized = apply_group_inheritance(extract_from_pdf(pdf_path))
-
-    if output_path.lower().endswith(".json"):
-        with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(normalized, f, ensure_ascii=False, indent=2)
-    else:
-        pd.DataFrame(normalized).to_csv(output_path, index=False, encoding="utf-8-sig")
-
+    export_records(normalized, output_path)
     print(f"Da xuat {len(normalized)} record ra {output_path}", file=sys.stderr)
