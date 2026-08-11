@@ -26,3 +26,35 @@ def test_match_header_fields_is_case_insensitive():
 def test_is_task_header_requires_both_units():
     assert is_task_header({0: "don_vi_chu_tri", 1: "don_vi_phoi_hop"})
     assert not is_task_header({0: "don_vi_chu_tri", 1: "san_pham"})
+
+
+def test_exact_column_wins_over_column_that_merely_contains_the_keyword():
+    # Header that cua test_2.xlsx: cot "Phong, don vi chu tri" chi chua cum tu
+    # khoa nhu mot phan ten, khong duoc tranh mat truong cua cot dung nghia.
+    row = ["STT", "Mã nhiệm vụ", "Tên nhóm nhiệm vụ/nhiệm vụ", "Đơn vị chủ trì",
+           "Phòng, đơn vị chủ trì", "Đơn vị phối hợp"]
+
+    mapping = match_header_fields([row])
+
+    assert mapping[3] == "don_vi_chu_tri"
+    assert 4 not in mapping
+
+
+def test_exact_column_wins_regardless_of_column_order():
+    row = ["Phòng, đơn vị chủ trì", "Đơn vị chủ trì", "Đơn vị phối hợp"]
+
+    mapping = match_header_fields([row])
+
+    assert mapping[1] == "don_vi_chu_tri"
+    assert 0 not in mapping
+
+
+def test_short_column_names_of_test3_are_recognised():
+    row = ["TT", "Lĩnh vực", "Nội dung", "Tiến độ (nếu có)", "Chủ trì", "Phối hợp"]
+
+    mapping = match_header_fields([row])
+
+    assert mapping[0] == "tt"
+    assert mapping[2] == "ten_nhiem_vu"
+    assert mapping[4] == "don_vi_chu_tri"
+    assert mapping[5] == "don_vi_phoi_hop"

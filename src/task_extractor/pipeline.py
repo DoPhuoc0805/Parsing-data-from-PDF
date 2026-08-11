@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .read_excel import read_excel
 from .read_pdf import read_pdf
 from .tasks import build_tasks
 from .views import group_tasks, write_csv, write_json
@@ -23,17 +24,25 @@ BRONZE = "bronze"
 SILVER = "silver"
 GOLD = "gold"
 
+READERS = {
+    ".pdf": read_pdf,
+    ".xlsx": read_excel,
+    ".xlsm": read_excel,
+}
+
 
 def _bronze_path(data_dir, name) -> Path:
     return Path(data_dir) / BRONZE / f"{name}.json"
 
 
 def read_source(input_path: str) -> list:
-    """Đọc file nguồn thành danh sách dòng thô, chọn cách đọc theo đuôi file."""
+    """Đọc file nguồn thành danh sách dòng thô, tự chọn cách đọc theo đuôi file."""
     suffix = Path(input_path).suffix.lower()
-    if suffix == ".pdf":
-        return read_pdf(input_path)
-    raise ValueError(f"Chua ho tro dinh dang {suffix!r} (input: {input_path})")
+    reader = READERS.get(suffix)
+    if reader is None:
+        supported = ", ".join(sorted(READERS))
+        raise ValueError(f"Chua ho tro dinh dang {suffix!r}; hien doc duoc: {supported}")
+    return reader(input_path)
 
 
 def run_pipeline(input_path: str, data_dir: str = "data", from_bronze: bool = False) -> list:

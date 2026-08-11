@@ -20,11 +20,14 @@ from typing import Optional
 CANONICAL_FIELDS = {
     "tt": ["TT"],
     "chi_tiet": ["Chi tiết"],
-    "ten_nhiem_vu": ["Tên nhiệm vụ", "Công việc"],
-    "don_vi_chu_tri": ["Đơn vị chủ trì", "Đơn vị thực hiện"],
-    "don_vi_phoi_hop": ["Đơn vị phối hợp"],
+    "ma_goc": ["Mã nhiệm vụ"],
+    "ten_nhiem_vu": ["Tên nhiệm vụ", "Tên nhóm nhiệm vụ", "Công việc", "Nội dung"],
+    "don_vi_chu_tri": ["Đơn vị chủ trì", "Đơn vị thực hiện", "Chủ trì"],
+    "don_vi_phoi_hop": ["Đơn vị phối hợp", "Phối hợp"],
     "san_pham": ["Sản phẩm"],
-    "thoi_han": ["Thời hạn", "Số ngày dự kiến"],
+    "thoi_han": ["Thời hạn", "Thời gian hoàn thành", "Số ngày dự kiến"],
+    "ket_qua": ["Kết quả cần đạt", "Kết quả thực hiện"],
+    "ghi_chu": ["Ghi chú"],
 }
 
 # Từ khóa ngắn (vd "TT") dễ khớp nhầm vào chuỗi con của từ khác (vd "Viettel"
@@ -57,6 +60,25 @@ def _matches_synonym(text: str, synonym: str) -> bool:
     return syn_lower in text
 
 
+def _resolve_field_conflicts(mapping: dict, is_exact: dict) -> dict:
+    """Mỗi trường chuẩn chỉ được giữ đúng 1 cột; cột khớp chính xác thắng cột
+    chỉ khớp một phần.
+
+    Có văn bản đặt 2 cột chứa cùng cụm từ khóa, vd "Đơn vị chủ trì" và
+    "Phòng, đơn vị chủ trì" — cột thứ hai chỉ chứa cụm đó như một phần tên
+    nên không được tranh mất trường của cột đúng nghĩa. Khi cả hai cùng mức
+    khớp thì cột đứng trước thắng.
+    """
+    best_column = {}
+    for col_index, field in mapping.items():
+        current = best_column.get(field)
+        if current is None or (is_exact[col_index] and not is_exact[current]):
+            best_column[field] = col_index
+
+    kept = set(best_column.values())
+    return {col: field for col, field in mapping.items() if col in kept}
+
+
 def match_header_fields(rows: list) -> dict:
     """Ánh xạ {vị trí cột: trường chuẩn} cho các cột khớp CANONICAL_FIELDS.
 
@@ -65,6 +87,7 @@ def match_header_fields(rows: list) -> dict:
     bởi dòng sau. So khớp không phân biệt hoa/thường.
     """
     mapping = {}
+    is_exact = {}
     for row in rows:
         for col_index, cell in enumerate(row):
             if col_index in mapping:
@@ -75,8 +98,9 @@ def match_header_fields(rows: list) -> dict:
             for field, synonyms in CANONICAL_FIELDS.items():
                 if any(_matches_synonym(text, syn) for syn in synonyms):
                     mapping[col_index] = field
+                    is_exact[col_index] = any(text == syn.lower() for syn in synonyms)
                     break
-    return mapping
+    return _resolve_field_conflicts(mapping, is_exact)
 
 
 def is_task_header(column_mapping: dict) -> bool:
