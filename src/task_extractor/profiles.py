@@ -15,6 +15,13 @@ Ngay cả khi cờ này bật, dòng cha **không có đơn vị chủ trì lẫ
 bị coi là nhãn nhóm — một dòng không giao việc cho ai thì không thể là nhiệm
 vụ. Nhờ vậy văn bản trộn cả hai kiểu (như test_2: nhóm lớn chỉ là tiêu đề,
 nhóm con lại là nhiệm vụ tổng thật) được xử lý đúng mà không cần luật riêng.
+
+label_levels khai thêm các cấp mà dòng có con **luôn** là nhãn nhóm, kể cả khi
+có ghi đơn vị chủ trì. Có văn bản ghi đơn vị chủ trì ở cả dòng tiêu đề chương
+mục, nhưng đó là "chương này thuộc trách nhiệm ai" chứ không phải một việc cụ
+thể — dấu hiệu nhận ra là không kèm sản phẩm đầu ra. Không thể dùng chính cột
+sản phẩm để suy ra vì có nhiệm vụ tổng thật cũng bỏ trống cột này, và có văn
+bản không có cột sản phẩm nào.
 """
 
 from __future__ import annotations
@@ -34,6 +41,7 @@ class Profile:
     self_segment: Optional[str] = None  # đoạn cuối mang nghĩa "chính nó" (mã tuyệt đối)
     level_patterns: tuple = ()  # regex từng cấp (mã tương đối)
     keep_parent_as_task: bool = False
+    label_levels: tuple = ()  # cấp mà dòng có con luôn là nhãn nhóm
     drop_fields: tuple = ()  # cột chỉ dùng nội bộ, không đưa xuống tầng silver
 
 
@@ -60,6 +68,7 @@ DOTTED_CODE = Profile(
     code_field="ma_goc",
     parser="absolute",
     keep_parent_as_task=True,
+    label_levels=(1,),  # cấp 1 là chương mục của kế hoạch, không phải việc cụ thể
     drop_fields=("ma_goc", "tt"),
 )
 

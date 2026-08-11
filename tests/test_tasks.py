@@ -155,9 +155,26 @@ def _test2_tasks():
 def test_test2_drops_label_rows_but_keeps_summary_tasks():
     rows = read_excel(str(TEST2_XLSX))
     tasks = _test2_tasks()
-    # 178 dong - 21 dong chi la nhan nhom (khong giao viec cho don vi nao) = 157.
+    # 178 dong - 23 dong nhan nhom = 155. Nhan nhom gom: 20 chuong muc cap 1
+    # va 3 dong cap sau khong giao viec cho don vi nao.
     assert len(rows) == 178
-    assert len(tasks) == 157
+    assert len(tasks) == 155
+
+
+def test_test2_level_one_is_always_a_label_even_with_a_lead_unit():
+    # N14/N19 co ghi don vi chu tri nhung khong kem san pham dau ra — do la
+    # "chuong nay thuoc trach nhiem ai", khong phai mot viec cu the.
+    codes = {t["ma_nhiem_vu"] for t in _test2_tasks()}
+    assert "KH20_TT_N14" not in codes
+    assert "KH20_TT_N19" not in codes
+    # Nhung nhiem vu tong o cap sau thi van giu, du cung khong co san pham.
+    assert "KH20_TT_N01.1" in codes
+
+
+def test_test2_level_one_without_children_is_still_a_task():
+    # Luat chi ap cho dong CO con; ma 1 doan dung mot minh van la nhiem vu that.
+    codes = {t["ma_nhiem_vu"] for t in _test2_tasks()}
+    assert {f"TB200_N0{i}" for i in range(1, 7)} <= codes
 
 
 def test_test2_parent_with_its_own_assignment_stays_a_task():

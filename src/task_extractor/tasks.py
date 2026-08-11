@@ -121,7 +121,9 @@ def build_tasks(rows: list, profile: Profile = NUMBER_LETTER) -> list:
     for row, path in zip(rows, paths):
         has_children = path in parent_paths
         is_group_label = has_children and (
-            not profile.keep_parent_as_task or not _has_assignment(row)
+            not profile.keep_parent_as_task
+            or len(path) in profile.label_levels
+            or not _has_assignment(row)
         )
         if is_group_label:
             continue
