@@ -4,7 +4,7 @@ Công cụ trích xuất bảng phân công nhiệm vụ (nhiệm vụ → đơn
 
 ## Mục tiêu
 
-- **Input:** File chứa bảng phân công nhiệm vụ (vd: Phụ lục kế hoạch triển khai chuyển đổi số). Hiện hỗ trợ PDF có lớp text.
+- **Input:** File chứa bảng phân công nhiệm vụ (vd: Phụ lục kế hoạch triển khai chuyển đổi số). Hỗ trợ **PDF có lớp text** và **Excel** (`.xlsx`, `.xlsm`) — tự nhận dạng theo đuôi file, không cần khai báo gì thêm.
 - **Output:** Danh sách nhiệm vụ với mã nhiệm vụ, tên nhiệm vụ, đơn vị chủ trì, đơn vị phối hợp, sản phẩm, thời hạn, nhóm nhiệm vụ.
 
 ## Tầng dữ liệu
@@ -27,11 +27,30 @@ Tầng bronze tồn tại để **tách bạch lỗi "đọc sai" với lỗi "s
 | `fields.py` | Ánh xạ tiêu đề cột về trường chuẩn — dùng chung cho mọi nguồn |
 | `pdf_tables.py` | Dò bảng nhiệm vụ trong PDF, xử lý bảng ngắt qua nhiều trang |
 | `read_pdf.py` | PDF → dòng thô (bronze), gộp dòng bị ngắt trang |
-| `tasks.py` | Dòng thô → nhiệm vụ chuẩn (silver): loại dòng nhóm cha, kế thừa cột dùng chung, ghép mã nhiệm vụ |
+| `read_excel.py` | Excel → dòng thô (bronze), điền ô gộp |
+| `hierarchy.py` | Mô hình đường dẫn phân cấp — dùng chung cho mọi loại văn bản |
+| `profiles.py` | Cấu hình cách đọc mã phân cấp cho từng kiểu mã hóa |
+| `tasks.py` | Dòng thô → nhiệm vụ chuẩn (silver): loại nhãn nhóm, kế thừa cột dùng chung |
 | `views.py` | Gộp nhóm (gold) và ghi file |
-| `pipeline.py` | Nối các tầng |
+| `pipeline.py` | Nối các tầng, tự chọn cách đọc và profile |
 
-Việc nhận diện bảng dựa vào header khớp các trường chuẩn (vd "Đơn vị chủ trì"/"Đơn vị thực hiện", "Đơn vị phối hợp") — không hard-code theo 1 mẫu cột cố định. Đã kiểm chứng chạy đúng trên 2 file PDF có cấu trúc bảng khác nhau hoàn toàn (7 cột/header 2 dòng và 5 cột/header 1 dòng).
+Việc nhận diện bảng dựa vào header khớp các trường chuẩn (vd "Đơn vị chủ trì"/"Đơn vị thực hiện"/"Chủ trì") — không hard-code theo 1 mẫu cột cố định.
+
+### Cách xác định nhiệm vụ cha/con
+
+Mỗi dòng được quy về một **đường dẫn phân cấp**, rồi mọi kết luận đều suy ra từ đó: mã nhiệm vụ là đường dẫn nối lại, cha là đường dẫn bỏ đoạn cuối, và **"có phải nhóm cha hay không" được suy ra từ chính dữ liệu** — dòng nào có dòng con nằm dưới thì là cha. Không có luật cứng viết riêng cho từng loại văn bản.
+
+Thêm một loại văn bản mới chỉ cần thêm một mục cấu hình trong `profiles.py`:
+
+| Profile | Kiểu mã | Ví dụ |
+|---|---|---|
+| `number_letter` | Cấp 1 là số, cấp 2 là chữ cái (mã tương đối) | PDF: `12` → `b)` |
+| `dotted_code` | Mã có tiền tố, phân cấp bằng dấu chấm | `KH20_TT_N01.1.1` |
+| `decimal_index` | Số thập phân, đuôi `.0` là chính nó | `13.0` → `13.5` |
+
+Profile được chọn tự động bằng cách thử đọc: kiểu mã sai gần như không đọc nổi dòng nào.
+
+Đã kiểm chứng trên 4 văn bản có cấu trúc khác nhau hoàn toàn — 2 PDF (7 cột/header 2 dòng và 5 cột/header 1 dòng) và 2 Excel (mã phân cấp có tiền tố, và số thập phân).
 
 ## Cài đặt
 
@@ -43,6 +62,7 @@ pip install -r requirements.txt
 
 ```bash
 python scripts/run_extract.py --input "data/raw/kh-cao-diem-100-ngay-c-s-tp-hn.pdf"
+python scripts/run_extract.py --input "data/raw/test_2.xlsx"
 ```
 
 Một lệnh ghi ra cả 3 tầng. Các cờ khác:
@@ -110,8 +130,18 @@ Mảng các nhóm, mỗi nhóm gồm tên nhóm, số hiệu nhóm, và mảng `
 - `data/raw/kh-cao-diem-100-ngay-c-s-tp-hn.pdf` — Kế hoạch đợt cao điểm 100 ngày chuyển đổi số TP Hà Nội (bảng nhiệm vụ ở Phụ lục, 7 cột, header 2 dòng).
 - `data/raw/CV 6582.pdf` — Công văn Sở Y tế Hà Nội về di trú Hồ sơ sức khỏe điện tử (5 cột, header 1 dòng).
 
+## Cảnh báo chất lượng dữ liệu
+
+Khi chạy, công cụ tự kiểm tra tính toàn vẹn của cây nhiệm vụ và in cảnh báo ra màn hình:
+
+- **Mã trùng lặp** — do lỗi đánh số ở văn bản gốc. Được tự thêm hậu tố `a`/`b` để dùng làm khóa chính, không chặn cả tài liệu.
+- **Cấp cha bị thiếu** — mã tham chiếu một cấp không có dòng nào trong văn bản (vd có `N05` và `N05.1.1` nhưng thiếu `N05.1`). Con trỏ cha được trỏ lên tổ tiên gần nhất còn tồn tại.
+
+Cả hai đều là lỗi biên tập ở văn bản nguồn, rất khó phát hiện bằng mắt trên file hàng trăm dòng — có thể gửi ngược lại cho người soạn văn bản để sửa.
+
 ## Giới hạn đã biết
 
 - Chỉ đọc được **PDF có lớp text**. PDF scan (ảnh) không trích xuất được gì nếu chưa có OCR.
 - Chỉ nhận diện được bảng có header chứa đủ 2 trường "đơn vị chủ trì" và "đơn vị phối hợp" (hoặc từ đồng nghĩa).
-- Việc gộp dòng bị ngắt trang và nối dòng bị wrap chữ dựa trên quy tắc suy ra từ 2 file mẫu hiện có; với văn bản trình bày khác biệt lớn, nên kiểm tra lại kết quả trước khi dùng.
+- Với Excel, chỉ đọc **sheet đầu tiên** của file.
+- Việc gộp dòng bị ngắt trang và nối dòng bị wrap chữ dựa trên quy tắc suy ra từ các file mẫu hiện có; với văn bản trình bày khác biệt lớn, nên kiểm tra lại kết quả trước khi dùng.

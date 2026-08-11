@@ -44,6 +44,9 @@ from .hierarchy import (
 from .profiles import NUMBER_LETTER, Profile
 
 INHERITABLE_FIELDS = ["don_vi_chu_tri", "don_vi_phoi_hop", "san_pham", "thoi_han"]
+
+# Dòng không giao việc cho đơn vị nào thì không thể là một nhiệm vụ được giao.
+ASSIGNMENT_FIELDS = ["don_vi_chu_tri", "don_vi_phoi_hop"]
 TEXT_FIELDS_TO_CLEAN = [
     "ten_nhiem_vu",
     "don_vi_chu_tri",
@@ -81,6 +84,31 @@ def _parse_paths(rows: list, profile: Profile) -> list:
     raise ValueError(f"Profile {profile.name!r} khai parser khong hop le: {profile.parser!r}")
 
 
+def _has_assignment(row: dict) -> bool:
+    return any(row.get(field) for field in ASSIGNMENT_FIELDS)
+
+
+def detect_profile(rows: list, candidates) -> Profile:
+    """Chọn profile đọc được nhiều dòng nhất trong các ứng viên của định dạng file.
+
+    Mỗi kiểu mã hóa dùng một cột mã khác nhau, nên profile sai gần như không
+    đọc nổi dòng nào — số dòng dựng được path là tín hiệu đủ rõ để tự chọn.
+    Khi không ứng viên nào đọc được (văn bản không có cột mã phân cấp), giữ
+    ứng viên đầu tiên để mọi dòng đi qua nguyên trạng thay vì bị loại.
+    """
+    candidates = list(candidates)
+    if not candidates:
+        raise ValueError("Khong co profile ung vien nao cho dinh dang nay")
+
+    best = candidates[0]
+    best_score = 0
+    for profile in candidates:
+        score = sum(1 for path in _parse_paths(rows, profile) if path)
+        if score > best_score:
+            best, best_score = profile, score
+    return best
+
+
 def build_tasks(rows: list, profile: Profile = NUMBER_LETTER) -> list:
     """Dựng danh sách nhiệm vụ chuẩn từ các dòng thô đã đọc được."""
     paths = dedupe_paths(_parse_paths(rows, profile))
@@ -91,7 +119,10 @@ def build_tasks(rows: list, profile: Profile = NUMBER_LETTER) -> list:
 
     result = []
     for row, path in zip(rows, paths):
-        is_group_label = path in parent_paths and not profile.keep_parent_as_task
+        has_children = path in parent_paths
+        is_group_label = has_children and (
+            not profile.keep_parent_as_task or not _has_assignment(row)
+        )
         if is_group_label:
             continue
 

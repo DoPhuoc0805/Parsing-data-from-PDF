@@ -10,6 +10,11 @@ vụ cha ở PDF là **ô merge dùng chung** (giá trị áp cho các dòng con
 nó không phải việc được giao), còn ở một số file Excel lại là **nhiệm vụ tổng
 thật** có đơn vị chủ trì và thời hạn riêng. Hai trường hợp này nhìn từ dữ liệu
 là như nhau nên phải khai báo.
+
+Ngay cả khi cờ này bật, dòng cha **không có đơn vị chủ trì lẫn phối hợp** vẫn
+bị coi là nhãn nhóm — một dòng không giao việc cho ai thì không thể là nhiệm
+vụ. Nhờ vậy văn bản trộn cả hai kiểu (như test_2: nhóm lớn chỉ là tiêu đề,
+nhóm con lại là nhiệm vụ tổng thật) được xử lý đúng mà không cần luật riêng.
 """
 
 from __future__ import annotations
@@ -46,3 +51,31 @@ NUMBER_LETTER = Profile(
     keep_parent_as_task=False,
     drop_fields=("tt", "chi_tiet"),
 )
+
+# Excel kiểu "mã phân cấp có tiền tố": KH20_TT_N01 -> N01.1 -> N01.1.1.
+# Mã tự chứa đủ đường dẫn nên số La Mã ở cột STT thành thừa — vốn cũng không
+# đáng tin (có nhóm bị bỏ trống số La Mã, lại có mã 1 đoạn là nhiệm vụ độc lập).
+DOTTED_CODE = Profile(
+    name="dotted_code",
+    code_field="ma_goc",
+    parser="absolute",
+    keep_parent_as_task=True,
+    drop_fields=("ma_goc", "tt"),
+)
+
+# Excel kiểu "số thập phân": 13.0 là nhiệm vụ số 13, 13.1 là việc con của nó.
+DECIMAL_INDEX = Profile(
+    name="decimal_index",
+    code_field="tt",
+    parser="absolute",
+    self_segment="0",
+    keep_parent_as_task=True,
+    drop_fields=("tt",),
+)
+
+# Ứng viên profile theo định dạng file. PDF chỉ có 1 kiểu mã nên không cần dò.
+PROFILES_BY_SUFFIX = {
+    ".pdf": (NUMBER_LETTER,),
+    ".xlsx": (DOTTED_CODE, DECIMAL_INDEX),
+    ".xlsm": (DOTTED_CODE, DECIMAL_INDEX),
+}

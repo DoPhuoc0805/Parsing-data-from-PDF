@@ -15,9 +15,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .profiles import PROFILES_BY_SUFFIX
 from .read_excel import read_excel
 from .read_pdf import read_pdf
-from .tasks import build_tasks
+from .tasks import build_tasks, detect_profile
 from .views import group_tasks, write_csv, write_json
 
 BRONZE = "bronze"
@@ -48,6 +49,7 @@ def read_source(input_path: str) -> list:
 def run_pipeline(input_path: str, data_dir: str = "data", from_bronze: bool = False) -> list:
     """Chạy toàn bộ pipeline, ghi ra cả 3 tầng, trả về danh sách nhiệm vụ (silver)."""
     name = Path(input_path).stem
+    suffix = Path(input_path).suffix.lower()
 
     if from_bronze:
         with open(_bronze_path(data_dir, name), encoding="utf-8") as f:
@@ -56,7 +58,8 @@ def run_pipeline(input_path: str, data_dir: str = "data", from_bronze: bool = Fa
         rows = read_source(input_path)
         write_json(rows, _bronze_path(data_dir, name))
 
-    tasks = build_tasks(rows)
+    profile = detect_profile(rows, PROFILES_BY_SUFFIX[suffix])
+    tasks = build_tasks(rows, profile)
     write_csv(tasks, Path(data_dir) / SILVER / f"{name}.csv")
     write_json(tasks, Path(data_dir) / SILVER / f"{name}.json")
     write_json(group_tasks(tasks), Path(data_dir) / GOLD / f"{name}.json")

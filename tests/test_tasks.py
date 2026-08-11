@@ -2,12 +2,21 @@
 
 from pathlib import Path
 
+from src.task_extractor.profiles import (
+    DECIMAL_INDEX,
+    DOTTED_CODE,
+    NUMBER_LETTER,
+    PROFILES_BY_SUFFIX,
+)
+from src.task_extractor.read_excel import read_excel
 from src.task_extractor.read_pdf import read_pdf
-from src.task_extractor.tasks import build_tasks
+from src.task_extractor.tasks import build_tasks, detect_profile
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "raw"
 KH277_PDF = DATA_DIR / "kh-cao-diem-100-ngay-c-s-tp-hn.pdf"
 CV6582_PDF = DATA_DIR / "CV 6582.pdf"
+TEST2_XLSX = DATA_DIR / "test_2.xlsx"
+TEST3_XLSX = DATA_DIR / "test_3.xlsx"
 
 
 def _kh277_tasks():
@@ -119,3 +128,96 @@ def test_cv6582_wrapped_unit_names_are_rejoined():
     # Ten don vi bi PDF wrap chu (vd "Sở KHCN,\nTập đoàn\nViettel") duoc noi lien.
     assert "\n" not in task["don_vi_phoi_hop"]
     assert task["don_vi_phoi_hop"] == "Sở KHCN, Tập đoàn Viettel"
+
+
+# --------------------------------------------------------------- chọn profile
+def _detect(path):
+    reader = read_excel if path.suffix == ".xlsx" else read_pdf
+    return detect_profile(reader(str(path)), PROFILES_BY_SUFFIX[path.suffix])
+
+
+def test_profile_is_detected_from_the_code_column_in_use():
+    assert _detect(TEST2_XLSX) is DOTTED_CODE
+    assert _detect(TEST3_XLSX) is DECIMAL_INDEX
+    assert _detect(KH277_PDF) is NUMBER_LETTER
+
+
+def test_document_without_any_code_column_still_gets_a_profile():
+    # CV6582 khong co cot ma phan cap nao -> moi dong di qua nguyen trang.
+    assert _detect(CV6582_PDF) is NUMBER_LETTER
+
+
+# --------------------------------------------------------------- Excel: mã phân cấp
+def _test2_tasks():
+    return build_tasks(read_excel(str(TEST2_XLSX)), DOTTED_CODE)
+
+
+def test_test2_drops_label_rows_but_keeps_summary_tasks():
+    rows = read_excel(str(TEST2_XLSX))
+    tasks = _test2_tasks()
+    # 178 dong - 21 dong chi la nhan nhom (khong giao viec cho don vi nao) = 157.
+    assert len(rows) == 178
+    assert len(tasks) == 157
+
+
+def test_test2_parent_with_its_own_assignment_stays_a_task():
+    # N01.1 vua co dong con, vua co don vi chu tri rieng -> la nhiem vu tong that.
+    codes = {t["ma_nhiem_vu"] for t in _test2_tasks()}
+    assert "KH20_TT_N01.1" in codes
+    assert "KH20_TT_N01.1.1" in codes
+
+
+def test_test2_parent_without_assignment_is_dropped_as_label():
+    codes = {t["ma_nhiem_vu"] for t in _test2_tasks()}
+    assert "KH20_TT_N01" not in codes
+    assert "KH20_TT_N13" not in codes
+
+
+def test_test2_group_context_comes_from_the_root_code():
+    task = _by_ma(_test2_tasks(), "KH20_TT_N01.1.1")
+    assert task["so_nhom_nhiem_vu"] == "KH20_TT_N01"
+    assert task["nhom_nhiem_vu"].startswith("Tập trung cao độ")
+
+
+def test_test2_standalone_code_is_kept_as_its_own_group():
+    # TB200_N01 la ma 1 doan nhung khong co dong con -> nhiem vu doc lap, phai giu.
+    task = _by_ma(_test2_tasks(), "TB200_N01")
+    assert task["so_nhom_nhiem_vu"] == "TB200_N01"
+    assert task["don_vi_chu_tri"] == "Sở Tài chính"
+
+
+def test_test2_missing_middle_level_does_not_lose_its_children():
+    # Van ban sot dong N05.1 nhung 5 dong con van phai vao dung nhom goc N05.
+    children = [t for t in _test2_tasks() if t["ma_nhiem_vu"].startswith("KH20_TT_N05.1.")]
+    assert len(children) == 5
+    assert {t["so_nhom_nhiem_vu"] for t in children} == {"KH20_TT_N05"}
+
+
+# --------------------------------------------------------------- Excel: số thập phân
+def _test3_tasks():
+    return build_tasks(read_excel(str(TEST3_XLSX)), DECIMAL_INDEX)
+
+
+def test_test3_keeps_every_row_because_parents_are_real_tasks():
+    rows = read_excel(str(TEST3_XLSX))
+    assert len(_test3_tasks()) == len(rows) == 375
+
+
+def test_test3_trailing_zero_means_the_task_itself():
+    # "13.0" la nhiem vu so 13, khong phai con thu 0 cua no.
+    task = _by_ma(_test3_tasks(), "13")
+    assert task["ten_nhiem_vu"] == "Công tác biên chế thường xuyên"
+
+
+def test_test3_children_belong_to_their_decimal_parent():
+    task = _by_ma(_test3_tasks(), "13.5")
+    assert task["so_nhom_nhiem_vu"] == "13"
+    assert task["nhom_nhiem_vu"] == "Công tác biên chế thường xuyên"
+
+
+def test_test3_duplicate_codes_are_made_unique():
+    # 3 cap ma bi trung do loi danh so o van ban goc -> them hau to de dung
+    # duoc lam khoa chinh, thay vi chan ca tai lieu.
+    codes = [t["ma_nhiem_vu"] for t in _test3_tasks()]
+    assert len(codes) == len(set(codes))
+    assert {"122a", "122b", "194a", "194b"} <= set(codes)
