@@ -32,6 +32,7 @@ dòng để không mất định dạng danh sách.
 
 from __future__ import annotations
 
+import logging
 import re
 
 from .hierarchy import (
@@ -47,6 +48,13 @@ INHERITABLE_FIELDS = ["don_vi_chu_tri", "don_vi_phoi_hop", "san_pham", "thoi_han
 
 # Dòng không giao việc cho đơn vị nào thì không thể là một nhiệm vụ được giao.
 ASSIGNMENT_FIELDS = ["don_vi_chu_tri", "don_vi_phoi_hop"]
+
+# Luật "dòng cha không kèm sản phẩm là nhãn nhóm" chỉ đáng tin khi cột sản phẩm
+# được điền nghiêm túc. Dưới ngưỡng này ở các dòng lá là dấu hiệu cột bị bỏ bê,
+# lúc đó kết quả vẫn chạy nhưng phải cảnh báo để người dùng kiểm lại.
+DELIVERABLE_COVERAGE_THRESHOLD = 0.5
+
+logger = logging.getLogger(__name__)
 TEXT_FIELDS_TO_CLEAN = [
     "ten_nhiem_vu",
     "don_vi_chu_tri",
@@ -88,6 +96,36 @@ def _has_assignment(row: dict) -> bool:
     return any(row.get(field) for field in ASSIGNMENT_FIELDS)
 
 
+def _column_exists(rows: list, field: str) -> bool:
+    """Cột vắng hẳn khỏi văn bản khác với cột có mà ô để trống: phần đọc file
+    chỉ tạo trường cho cột thật sự có trong header, nên kiểm tra bằng key."""
+    return any(field in row for row in rows)
+
+
+def _warn_if_deliverable_is_sparse(leaf_rows: list, field: str) -> None:
+    if not leaf_rows:
+        return
+    filled = sum(1 for row in leaf_rows if row.get(field))
+    coverage = filled / len(leaf_rows)
+    if coverage < DELIVERABLE_COVERAGE_THRESHOLD:
+        logger.warning(
+            "Cot %r chi duoc dien o %d/%d nhiem vu (%.0f%%) - dung lam dau hieu "
+            "nhan nhom co the loai nham; nen kiem lai ket qua",
+            field, filled, len(leaf_rows), coverage * 100,
+        )
+
+
+def _is_group_label(row: dict, profile: Profile, use_deliverable: bool) -> bool:
+    """Dòng có nhiệm vụ con nằm dưới: là nhãn nhóm hay là nhiệm vụ tổng thật?"""
+    if not profile.keep_parent_as_task:
+        return True
+    if not _has_assignment(row):
+        return True
+    if use_deliverable and not row.get(profile.deliverable_field):
+        return True
+    return False
+
+
 def detect_profile(rows: list, candidates) -> Profile:
     """Chọn profile đọc được nhiều dòng nhất trong các ứng viên của định dạng file.
 
@@ -117,15 +155,17 @@ def build_tasks(rows: list, profile: Profile = NUMBER_LETTER) -> list:
     parent_paths = derive_parent_paths(paths)
     row_by_path = {path: row for path, row in zip(paths, rows) if path}
 
+    deliverable = profile.deliverable_field
+    use_deliverable = bool(deliverable) and _column_exists(rows, deliverable)
+    if use_deliverable:
+        _warn_if_deliverable_is_sparse(
+            [row for row, path in zip(rows, paths) if path and path not in parent_paths],
+            deliverable,
+        )
+
     result = []
     for row, path in zip(rows, paths):
-        has_children = path in parent_paths
-        is_group_label = has_children and (
-            not profile.keep_parent_as_task
-            or len(path) in profile.label_levels
-            or not _has_assignment(row)
-        )
-        if is_group_label:
+        if path in parent_paths and _is_group_label(row, profile, use_deliverable):
             continue
 
         task = dict(row)

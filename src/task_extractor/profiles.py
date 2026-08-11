@@ -16,12 +16,15 @@ bị coi là nhãn nhóm — một dòng không giao việc cho ai thì không t
 vụ. Nhờ vậy văn bản trộn cả hai kiểu (như test_2: nhóm lớn chỉ là tiêu đề,
 nhóm con lại là nhiệm vụ tổng thật) được xử lý đúng mà không cần luật riêng.
 
-label_levels khai thêm các cấp mà dòng có con **luôn** là nhãn nhóm, kể cả khi
-có ghi đơn vị chủ trì. Có văn bản ghi đơn vị chủ trì ở cả dòng tiêu đề chương
-mục, nhưng đó là "chương này thuộc trách nhiệm ai" chứ không phải một việc cụ
-thể — dấu hiệu nhận ra là không kèm sản phẩm đầu ra. Không thể dùng chính cột
-sản phẩm để suy ra vì có nhiệm vụ tổng thật cũng bỏ trống cột này, và có văn
-bản không có cột sản phẩm nào.
+deliverable_field khai cột "sản phẩm đầu ra" của văn bản, dùng làm dấu hiệu
+tinh hơn: dòng có con mà **không kèm sản phẩm** thì là nhãn nhóm, dù có ghi
+đơn vị chủ trì. Có văn bản ghi đơn vị chủ trì ở cả dòng tiêu đề chương mục,
+nhưng đó là "chương này thuộc trách nhiệm ai" chứ không phải một việc cụ thể.
+
+Không phải văn bản nào cũng có cột này (2/4 văn bản mẫu hiện tại không có),
+nên luật chỉ chạy khi cột **thực sự tồn tại** trong văn bản đang đọc — vắng
+cột thì quay về dấu hiệu cơ bản là có giao việc cho đơn vị nào không. Không
+phán xét bằng một cột không có mặt.
 """
 
 from __future__ import annotations
@@ -41,7 +44,7 @@ class Profile:
     self_segment: Optional[str] = None  # đoạn cuối mang nghĩa "chính nó" (mã tuyệt đối)
     level_patterns: tuple = ()  # regex từng cấp (mã tương đối)
     keep_parent_as_task: bool = False
-    label_levels: tuple = ()  # cấp mà dòng có con luôn là nhãn nhóm
+    deliverable_field: Optional[str] = None  # cột sản phẩm đầu ra, nếu văn bản có
     drop_fields: tuple = ()  # cột chỉ dùng nội bộ, không đưa xuống tầng silver
 
 
@@ -68,7 +71,7 @@ DOTTED_CODE = Profile(
     code_field="ma_goc",
     parser="absolute",
     keep_parent_as_task=True,
-    label_levels=(1,),  # cấp 1 là chương mục của kế hoạch, không phải việc cụ thể
+    deliverable_field="san_pham",
     drop_fields=("ma_goc", "tt"),
 )
 

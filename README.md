@@ -50,6 +50,8 @@ Thêm một loại văn bản mới chỉ cần thêm một mục cấu hình tr
 
 Profile được chọn tự động bằng cách thử đọc: kiểu mã sai gần như không đọc nổi dòng nào.
 
+**Dòng nào là nhãn nhóm, dòng nào là nhiệm vụ thật?** Dòng có nhiệm vụ con nằm dưới bị coi là nhãn nhóm khi: profile khai không giữ dòng cha (PDF), *hoặc* dòng đó không giao việc cho đơn vị nào, *hoặc* văn bản có cột sản phẩm đầu ra mà dòng đó bỏ trống — vì khi đó nó là tiêu đề chương mục ("phần này thuộc trách nhiệm ai") chứ không phải một việc cụ thể. Luật cuối chỉ chạy khi cột sản phẩm **thực sự tồn tại** trong văn bản đang đọc; vắng cột thì không phán xét bằng một cột không có mặt.
+
 Đã kiểm chứng trên 4 văn bản có cấu trúc khác nhau hoàn toàn — 2 PDF (7 cột/header 2 dòng và 5 cột/header 1 dòng) và 2 Excel (mã phân cấp có tiền tố, và số thập phân).
 
 ## Cài đặt
@@ -136,6 +138,7 @@ Khi chạy, công cụ tự kiểm tra tính toàn vẹn của cây nhiệm vụ
 
 - **Mã trùng lặp** — do lỗi đánh số ở văn bản gốc. Được tự thêm hậu tố `a`/`b` để dùng làm khóa chính, không chặn cả tài liệu.
 - **Cấp cha bị thiếu** — mã tham chiếu một cấp không có dòng nào trong văn bản (vd có `N05` và `N05.1.1` nhưng thiếu `N05.1`). Con trỏ cha được trỏ lên tổ tiên gần nhất còn tồn tại.
+- **Cột sản phẩm bị bỏ bê** — cột này được dùng để phân biệt nhãn nhóm với nhiệm vụ thật, nên nếu nó tồn tại mà ít được điền (dưới 50% số nhiệm vụ), kết quả vẫn chạy nhưng có cảnh báo để kiểm lại.
 
 Cả hai đều là lỗi biên tập ở văn bản nguồn, rất khó phát hiện bằng mắt trên file hàng trăm dòng — có thể gửi ngược lại cho người soạn văn bản để sửa.
 

@@ -1,5 +1,6 @@
 """Unit test cho tasks.py: loại dòng nhóm cha, kế thừa cột dùng chung."""
 
+import logging
 from pathlib import Path
 
 from src.task_extractor.profiles import (
@@ -155,33 +156,36 @@ def _test2_tasks():
 def test_test2_drops_label_rows_but_keeps_summary_tasks():
     rows = read_excel(str(TEST2_XLSX))
     tasks = _test2_tasks()
-    # 178 dong - 23 dong nhan nhom = 155. Nhan nhom gom: 20 chuong muc cap 1
-    # va 3 dong cap sau khong giao viec cho don vi nao.
+    # 178 dong - 36 dong co con ma khong kem san pham dau ra = 142.
     assert len(rows) == 178
-    assert len(tasks) == 155
+    assert len(tasks) == 142
 
 
-def test_test2_level_one_is_always_a_label_even_with_a_lead_unit():
-    # N14/N19 co ghi don vi chu tri nhung khong kem san pham dau ra — do la
-    # "chuong nay thuoc trach nhiem ai", khong phai mot viec cu the.
+def test_test2_parent_without_a_deliverable_is_a_label():
     codes = {t["ma_nhiem_vu"] for t in _test2_tasks()}
+    # Cap 1 co ghi don vi chu tri nhung khong kem san pham — do la "chuong nay
+    # thuoc trach nhiem ai", khong phai mot viec cu the.
     assert "KH20_TT_N14" not in codes
     assert "KH20_TT_N19" not in codes
-    # Nhung nhiem vu tong o cap sau thi van giu, du cung khong co san pham.
-    assert "KH20_TT_N01.1" in codes
+    # O cap 2 cung vay: chinh o ghi chu cua van ban goi N01.1 la "nhom nhiem vu".
+    assert "KH20_TT_N01.1" not in codes
+
+
+def test_test2_parent_with_a_deliverable_stays_a_task():
+    # N19.1 vua co dong con, vua co san pham "De an" -> nhiem vu tong that.
+    codes = {t["ma_nhiem_vu"] for t in _test2_tasks()}
+    assert "KH20_TT_N19.1" in codes
+
+
+def test_dropping_a_parent_does_not_drop_its_children():
+    codes = {t["ma_nhiem_vu"] for t in _test2_tasks()}
+    assert {"KH20_TT_N01.1.1", "KH20_TT_N01.1.2"} <= codes
 
 
 def test_test2_level_one_without_children_is_still_a_task():
     # Luat chi ap cho dong CO con; ma 1 doan dung mot minh van la nhiem vu that.
     codes = {t["ma_nhiem_vu"] for t in _test2_tasks()}
     assert {f"TB200_N0{i}" for i in range(1, 7)} <= codes
-
-
-def test_test2_parent_with_its_own_assignment_stays_a_task():
-    # N01.1 vua co dong con, vua co don vi chu tri rieng -> la nhiem vu tong that.
-    codes = {t["ma_nhiem_vu"] for t in _test2_tasks()}
-    assert "KH20_TT_N01.1" in codes
-    assert "KH20_TT_N01.1.1" in codes
 
 
 def test_test2_parent_without_assignment_is_dropped_as_label():
@@ -230,6 +234,51 @@ def test_test3_children_belong_to_their_decimal_parent():
     task = _by_ma(_test3_tasks(), "13.5")
     assert task["so_nhom_nhiem_vu"] == "13"
     assert task["nhom_nhiem_vu"] == "Công tác biên chế thường xuyên"
+
+
+# --------------------------------------------------------------- chốt chặn cột sản phẩm
+def test_deliverable_rule_is_skipped_when_the_column_is_absent():
+    # Van ban khong co cot san pham nao (nhu CV6582, test_3) thi khong duoc
+    # phan xet bang mot cot khong co mat -> quay ve dau hieu co giao viec.
+    rows = [
+        {"ma_goc": "A", "ten_nhiem_vu": "Nhom lon", "don_vi_chu_tri": "Sở X"},
+        {"ma_goc": "A.1", "ten_nhiem_vu": "Viec con", "don_vi_chu_tri": "Sở Y"},
+    ]
+
+    assert {t["ma_nhiem_vu"] for t in build_tasks(rows, DOTTED_CODE)} == {"A", "A.1"}
+
+
+def test_deliverable_rule_applies_when_the_column_exists_but_is_empty():
+    # Cung dong "A" nhu tren, nhung lan nay van ban CO cot san pham va o do
+    # de trong -> lan nay moi bi coi la nhan nhom.
+    rows = [
+        {"ma_goc": "A", "ten_nhiem_vu": "Nhom lon", "don_vi_chu_tri": "Sở X", "san_pham": None},
+        {"ma_goc": "A.1", "ten_nhiem_vu": "Viec con", "don_vi_chu_tri": "Sở Y", "san_pham": "Báo cáo"},
+    ]
+
+    assert {t["ma_nhiem_vu"] for t in build_tasks(rows, DOTTED_CODE)} == {"A.1"}
+
+
+def test_sparse_deliverable_column_is_warned_about(caplog):
+    # Cot san pham co ton tai nhung gan nhu khong ai dien -> dung lam dau hieu
+    # se loai nham, phai canh bao thay vi im lang cho ket qua sai.
+    rows = [{"ma_goc": "A", "ten_nhiem_vu": "Nhom", "don_vi_chu_tri": "Sở X", "san_pham": "Đề án"}]
+    rows += [
+        {"ma_goc": f"A.{i}", "ten_nhiem_vu": "Viec", "don_vi_chu_tri": "Sở Y", "san_pham": None}
+        for i in range(1, 5)
+    ]
+
+    with caplog.at_level(logging.WARNING):
+        build_tasks(rows, DOTTED_CODE)
+
+    assert "chi duoc dien" in caplog.text
+
+
+def test_well_filled_deliverable_column_is_not_warned_about(caplog):
+    with caplog.at_level(logging.WARNING):
+        build_tasks(read_excel(str(TEST2_XLSX)), DOTTED_CODE)
+
+    assert "chi duoc dien" not in caplog.text
 
 
 def test_test3_duplicate_codes_are_made_unique():
