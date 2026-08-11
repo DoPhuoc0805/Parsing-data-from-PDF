@@ -19,7 +19,16 @@ def test_run_pipeline_exports_json(tmp_path):
     assert len(records) == 33
     with open(output_path, encoding="utf-8") as f:
         exported = json.load(f)
-    assert exported == records
+
+    assert isinstance(exported, list)
+    total_tasks = sum(len(group["data"]) for group in exported)
+    assert total_tasks == len(records)
+    for group in exported:
+        assert "nhom_nhiem_vu" in group
+        assert "so_nhom_nhiem_vu" in group
+        for task in group["data"]:
+            assert "nhom_nhiem_vu" not in task
+            assert "so_nhom_nhiem_vu" not in task
 
 
 def test_run_pipeline_exports_csv(tmp_path):

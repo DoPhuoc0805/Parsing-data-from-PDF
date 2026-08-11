@@ -48,10 +48,10 @@ python scripts/run_extract.py --input "data/raw/CV 6582.pdf" --output "data/outp
 
 **Định dạng output được chọn tự động theo đuôi file** truyền vào `--output` — không cần thêm flag nào khác:
 
-- Đuôi `.csv` → xuất CSV bằng `pandas`.
-- Đuôi `.json` → xuất JSON (dùng `json.dump` chuẩn, không cần cài thêm thư viện).
+- Đuôi `.csv` → xuất CSV dạng phẳng bằng `pandas`, mỗi dòng 1 nhiệm vụ.
+- Đuôi `.json` → xuất JSON **gộp theo nhóm nhiệm vụ** (dùng `json.dump` chuẩn, không cần cài thêm thư viện) — xem cấu trúc ở mục Schema output bên dưới.
 
-Nên ưu tiên dùng JSON khi cần xử lý tiếp bằng code (giữ đúng kiểu dữ liệu, `None` hiện thành `null` thay vì `NaN` gây khó đọc khi mở CSV bằng Excel/Jupyter) — dùng CSV khi cần mở trực tiếp bằng Excel để xem/lọc bằng tay.
+Nên ưu tiên dùng JSON khi cần xử lý tiếp bằng code (giữ đúng kiểu dữ liệu, `None` hiện thành `null` thay vì `NaN` gây khó đọc khi mở CSV bằng Excel/Jupyter; đồng thời có sẵn cấu trúc theo nhóm) — dùng CSV khi cần mở trực tiếp bằng Excel để xem/lọc bằng tay (dạng phẳng, không gộp nhóm).
 
 ### Debug từng bước riêng lẻ
 
@@ -73,6 +73,8 @@ python -m pytest tests/ -v
 
 ## Schema output
 
+### CSV (dạng phẳng)
+
 | Field | Ý nghĩa |
 |---|---|
 | `ma_nhiem_vu` | Mã nhiệm vụ, vd "1a", "12b" (số nhóm + chữ cái con); nhiệm vụ độc lập thì là số riêng của nó, vd "8" |
@@ -82,9 +84,46 @@ python -m pytest tests/ -v
 | `san_pham` | Sản phẩm đầu ra (nếu file gốc có cột này) |
 | `thoi_han` | Thời hạn hoặc số ngày dự kiến |
 | `nhom_nhiem_vu` | Tên nhóm nhiệm vụ lớn mà dòng này thuộc về (nhiệm vụ độc lập thì bằng chính `ten_nhiem_vu` của nó) |
-| `nhom_so_thu_tu` | Số hiệu nhóm dạng số thuần, tiện sort/filter |
+| `so_nhom_nhiem_vu` | Số hiệu nhóm dạng số thuần, tiện sort/filter |
 
 Cột `tt`, `chi_tiet` chỉ dùng nội bộ trong quá trình xử lý, không xuất hiện trong CSV/JSON cuối cùng.
+
+### JSON (gộp theo nhóm)
+
+JSON xuất ra là 1 mảng các nhóm, mỗi nhóm gồm tên nhóm, số hiệu nhóm, và mảng `data` chứa các nhiệm vụ con (đã bỏ 2 field `nhom_nhiem_vu`/`so_nhom_nhiem_vu` khỏi từng nhiệm vụ con vì đã có ở cấp nhóm). Nhiệm vụ độc lập trở thành 1 nhóm chỉ có 1 phần tử trong `data`:
+
+```json
+[
+  {
+    "nhom_nhiem_vu": "Làm sạch, di trú, tích hợp, chuẩn hóa nhóm dữ liệu thiết yếu...",
+    "so_nhom_nhiem_vu": "1",
+    "data": [
+      {
+        "ma_nhiem_vu": "1a",
+        "ten_nhiem_vu": "...",
+        "don_vi_chu_tri": "Sở Tài chính",
+        "don_vi_phoi_hop": "Sở Khoa học và Công nghệ",
+        "san_pham": "...",
+        "thoi_han": "30/8/2026"
+      }
+    ]
+  },
+  {
+    "nhom_nhiem_vu": "Tên nhiệm vụ độc lập",
+    "so_nhom_nhiem_vu": "8",
+    "data": [
+      {
+        "ma_nhiem_vu": "8",
+        "ten_nhiem_vu": "Tên nhiệm vụ độc lập",
+        "don_vi_chu_tri": "...",
+        "don_vi_phoi_hop": "...",
+        "san_pham": "...",
+        "thoi_han": "..."
+      }
+    ]
+  }
+]
+```
 
 ## Dữ liệu mẫu
 

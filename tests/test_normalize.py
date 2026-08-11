@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from src.pdf_task_extractor.extract_tables import extract_from_pdf
-from src.pdf_task_extractor.normalize import apply_group_inheritance
+from src.pdf_task_extractor.normalize import apply_group_inheritance, group_by_nhiem_vu
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "raw"
 KH277_PDF = DATA_DIR / "kh-cao-diem-100-ngay-c-s-tp-hn.pdf"
@@ -40,7 +40,7 @@ def test_group_with_shared_coordination_and_deadline_is_inherited():
     for record in children:
         assert record["don_vi_phoi_hop"] == "Sở Khoa học và Công nghệ"
         assert record["thoi_han"] == "30/8/2026"
-        assert record["nhom_so_thu_tu"] == "1"
+        assert record["so_nhom_nhiem_vu"] == "1"
 
     # Don vi chu tri van rieng theo tung dong con, khong bi ghi de.
     assert _by_ma(children, "1a")["don_vi_chu_tri"] == "Sở Tài chính"
@@ -78,7 +78,7 @@ def test_standalone_task_uses_itself_as_its_own_group():
     normalized = _normalized_kh277()
     record = _by_ma(normalized, "8")
     assert record["nhom_nhiem_vu"] == record["ten_nhiem_vu"]
-    assert record["nhom_so_thu_tu"] == "8"
+    assert record["so_nhom_nhiem_vu"] == "8"
     assert record["don_vi_chu_tri"] == "Sở Văn hóa và Thể thao"
 
 
@@ -93,7 +93,7 @@ def test_wrapped_lines_are_rejoined_but_bullets_are_kept_separate():
     assert "thời gian giải quyết, 50% thành phần hồ sơ." in lines[-1]
 
 
-_ADDED_FIELDS = ["nhom_nhiem_vu", "nhom_so_thu_tu", "ma_nhiem_vu"]
+_ADDED_FIELDS = ["nhom_nhiem_vu", "so_nhom_nhiem_vu", "ma_nhiem_vu"]
 _DROPPED_FIELDS = ["tt", "chi_tiet"]
 
 
@@ -113,3 +113,33 @@ def test_cv6582_wrapped_unit_names_are_rejoined():
     # Ten don vi bi PDF wrap chu (vd "Sở KHCN,\nTập đoàn\nViettel") duoc noi lien.
     assert "\n" not in record["don_vi_phoi_hop"]
     assert record["don_vi_phoi_hop"] == "Sở KHCN, Tập đoàn Viettel"
+
+
+def test_group_by_nhiem_vu_groups_children_under_their_group():
+    normalized = _normalized_kh277()
+    grouped = group_by_nhiem_vu(normalized)
+
+    assert sum(len(group["data"]) for group in grouped) == len(normalized)
+
+    group_1 = next(g for g in grouped if g["so_nhom_nhiem_vu"] == "1")
+    assert len(group_1["data"]) == 8
+    assert all(task["ma_nhiem_vu"].startswith("1") for task in group_1["data"])
+    for task in group_1["data"]:
+        assert "nhom_nhiem_vu" not in task
+        assert "so_nhom_nhiem_vu" not in task
+
+
+def test_group_by_nhiem_vu_standalone_task_becomes_group_of_one():
+    normalized = _normalized_kh277()
+    grouped = group_by_nhiem_vu(normalized)
+
+    group_8 = next(g for g in grouped if g["so_nhom_nhiem_vu"] == "8")
+    assert len(group_8["data"]) == 1
+    assert group_8["data"][0]["ma_nhiem_vu"] == "8"
+
+
+def test_group_by_nhiem_vu_preserves_group_order_of_first_appearance():
+    normalized = _normalized_kh277()
+    grouped = group_by_nhiem_vu(normalized)
+    numbers = [g["so_nhom_nhiem_vu"] for g in grouped]
+    assert numbers == sorted(numbers, key=int)

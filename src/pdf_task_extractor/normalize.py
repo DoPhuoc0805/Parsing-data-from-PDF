@@ -21,13 +21,21 @@ Ngoài ra, dòng nhóm cha còn giữ **số hiệu nhóm** (chính "chi_tiet" c
 cha, vd "1", "12") — dùng để ghép thành mã nhiệm vụ đầy đủ cho dòng con
 (field "ma_nhiem_vu", vd "1a", "12b": số hiệu nhóm + chữ cái con, bỏ dấu
 ")"). Với nhiệm vụ độc lập (không có dòng con), mã nhiệm vụ chính là số
-hiệu của nó (vd "8"). Field "nhom_so_thu_tu" giữ số hiệu nhóm dạng số
+hiệu của nó (vd "8"). Field "so_nhom_nhiem_vu" giữ số hiệu nhóm dạng số
 thuần (tách riêng khỏi "nhom_nhiem_vu" là tên nhóm dạng câu) để dễ
 sort/group.
 
 Với nhiệm vụ độc lập (không có dòng con), "nhom_nhiem_vu" và
-"nhom_so_thu_tu" được điền bằng chính tên/số của nó — vì nó tự là 1 nhóm
+"so_nhom_nhiem_vu" được điền bằng chính tên/số của nó — vì nó tự là 1 nhóm
 chỉ gồm 1 nhiệm vụ, không phải "không thuộc nhóm nào".
+
+Cuối cùng, hàm "export_records" khi xuất JSON sẽ gộp danh sách nhiệm vụ
+phẳng ở trên thành danh sách theo nhóm (mỗi nhóm 1 object gồm tên nhóm,
+số hiệu nhóm, và mảng "data" chứa các nhiệm vụ con — đã bỏ 2 field
+"nhom_nhiem_vu"/"so_nhom_nhiem_vu" khỏi từng nhiệm vụ con vì đã có ở cấp
+nhóm, tránh lặp lại). Nhiệm vụ độc lập trở thành 1 nhóm chỉ có 1 phần tử
+trong "data". Xuất CSV thì vẫn giữ nguyên dạng phẳng như cũ vì bảng phẳng
+không hợp để chứa cấu trúc lồng nhau.
 
 
 Chưa xử lý ở bước này: dòng "mồ côi" do PDF tách rời 1 câu bị wrap thành
@@ -108,7 +116,7 @@ def apply_group_inheritance(records: list) -> list:
             # Nhiệm vụ độc lập (không có dòng con) — tự nó là 1 nhóm.
             ma = (chi_tiet or "").strip()
             new_record["nhom_nhiem_vu"] = record.get("ten_nhiem_vu")
-            new_record["nhom_so_thu_tu"] = ma
+            new_record["so_nhom_nhiem_vu"] = ma
             new_record["ma_nhiem_vu"] = ma
             current_group = None
         elif current_group is not None:
@@ -116,11 +124,11 @@ def apply_group_inheritance(records: list) -> list:
                 if not new_record.get(field):
                     new_record[field] = current_group[field]
             new_record["nhom_nhiem_vu"] = current_group["ten_nhiem_vu"]
-            new_record["nhom_so_thu_tu"] = current_group["so_thu_tu"]
+            new_record["so_nhom_nhiem_vu"] = current_group["so_thu_tu"]
             new_record["ma_nhiem_vu"] = current_group["so_thu_tu"] + letter if letter else None
         else:
             new_record["nhom_nhiem_vu"] = None
-            new_record["nhom_so_thu_tu"] = None
+            new_record["so_nhom_nhiem_vu"] = None
             new_record["ma_nhiem_vu"] = None
 
         new_record.pop("tt", None)
@@ -135,14 +143,46 @@ def apply_group_inheritance(records: list) -> list:
     return result
 
 
+def group_by_nhiem_vu(records: list) -> list:
+    """Gộp danh sách nhiệm vụ phẳng thành danh sách theo nhóm: mỗi nhóm là 1
+    object {"nhom_nhiem_vu", "so_nhom_nhiem_vu", "data": [...]}, giữ đúng thứ
+    tự nhóm xuất hiện đầu tiên trong danh sách gốc. Nhiệm vụ độc lập (tự là 1
+    nhóm) trở thành 1 nhóm chỉ có 1 phần tử trong "data"."""
+    groups = []
+    group_by_key = {}
+
+    for record in records:
+        key = (record.get("so_nhom_nhiem_vu"), record.get("nhom_nhiem_vu"))
+        group = group_by_key.get(key)
+        if group is None:
+            group = {
+                "nhom_nhiem_vu": record.get("nhom_nhiem_vu"),
+                "so_nhom_nhiem_vu": record.get("so_nhom_nhiem_vu"),
+                "data": [],
+            }
+            group_by_key[key] = group
+            groups.append(group)
+
+        child = {
+            field: value
+            for field, value in record.items()
+            if field not in ("nhom_nhiem_vu", "so_nhom_nhiem_vu")
+        }
+        group["data"].append(child)
+
+    return groups
+
+
 def export_records(records: list, output_path: str) -> None:
     """Xuất danh sách record ra file. Định dạng chọn theo đuôi output_path:
-    ".json" -> JSON, còn lại -> CSV (qua pandas)."""
+    ".json" -> JSON gộp theo nhóm (qua group_by_nhiem_vu), còn lại -> CSV
+    dạng phẳng (qua pandas)."""
     import json
 
     if output_path.lower().endswith(".json"):
+        grouped = group_by_nhiem_vu(records)
         with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(records, f, ensure_ascii=False, indent=2)
+            json.dump(grouped, f, ensure_ascii=False, indent=2)
     else:
         import pandas as pd
 
