@@ -1,37 +1,37 @@
 # Parsing data from PDF
 
-Công cụ trích xuất bảng phân công nhiệm vụ (nhiệm vụ → đơn vị chủ trì/phối hợp) từ file PDF hành chính, xuất ra CSV hoặc JSON.
+Công cụ trích xuất bảng phân công nhiệm vụ (nhiệm vụ → đơn vị chủ trì/phối hợp) từ văn bản hành chính, xuất ra CSV/JSON theo 3 tầng dữ liệu.
 
 ## Mục tiêu
 
-- **Input:** File PDF chứa bảng phân công nhiệm vụ (vd: Phụ lục kế hoạch triển khai chuyển đổi số).
-- **Output:** File CSV hoặc JSON, mỗi dòng/phần tử là 1 nhiệm vụ với: mã nhiệm vụ, tên nhiệm vụ, đơn vị chủ trì, đơn vị phối hợp, sản phẩm (nếu có), thời hạn, tên nhóm nhiệm vụ.
+- **Input:** File chứa bảng phân công nhiệm vụ (vd: Phụ lục kế hoạch triển khai chuyển đổi số). Hiện hỗ trợ PDF có lớp text.
+- **Output:** Danh sách nhiệm vụ với mã nhiệm vụ, tên nhiệm vụ, đơn vị chủ trì, đơn vị phối hợp, sản phẩm, thời hạn, nhóm nhiệm vụ.
+
+## Tầng dữ liệu
+
+| Tầng | Nội dung | Định dạng |
+|---|---|---|
+| `data/raw/` | File gốc | nguyên bản |
+| `data/bronze/` | Dòng bảng đọc được, **chưa diễn giải** | JSON |
+| `data/silver/` | Bảng phẳng, 1 dòng = 1 nhiệm vụ | CSV + JSON |
+| `data/gold/` | Gộp theo nhóm nhiệm vụ | JSON |
+
+Mọi tầng dùng chung tên file gốc, để truy vết 1 văn bản xuyên suốt các tầng chỉ bằng tên.
+
+Tầng bronze tồn tại để **tách bạch lỗi "đọc sai" với lỗi "suy luận sai"** — khi kết quả lệch, mở bronze ra là biết ngay vấn đề nằm ở bước đọc file hay bước xử lý phân cấp. Đồng thời cho phép chạy lại phần xử lý mà không cần đọc lại PDF (xem `--from-bronze`).
 
 ## Cách hoạt động
 
-Pipeline gồm 3 bước, nối lại qua `pipeline.py`:
+| Module | Vai trò |
+|---|---|
+| `fields.py` | Ánh xạ tiêu đề cột về trường chuẩn — dùng chung cho mọi nguồn |
+| `pdf_tables.py` | Dò bảng nhiệm vụ trong PDF, xử lý bảng ngắt qua nhiều trang |
+| `read_pdf.py` | PDF → dòng thô (bronze), gộp dòng bị ngắt trang |
+| `tasks.py` | Dòng thô → nhiệm vụ chuẩn (silver): loại dòng nhóm cha, kế thừa cột dùng chung, ghép mã nhiệm vụ |
+| `views.py` | Gộp nhóm (gold) và ghi file |
+| `pipeline.py` | Nối các tầng |
 
-1. **`locate_tables.py`** — quét từng trang PDF, xác định bảng nào là bảng phân công nhiệm vụ (dựa vào header khớp các trường chuẩn như "Đơn vị chủ trì"/"Đơn vị thực hiện", "Đơn vị phối hợp" — không hard-code theo 1 mẫu cột cố định), xử lý được cả bảng bị ngắt qua nhiều trang.
-2. **`extract_tables.py`** — trích xuất dữ liệu thô từ các bảng đã xác định, gộp lại các dòng bị PDF cắt ngang do rơi đúng ranh giới trang (1 câu bị tách thành 2 dòng rác).
-3. **`normalize.py`** — loại bỏ dòng nhóm cha (tiêu đề nhóm không phải nhiệm vụ cụ thể), kế thừa các cột dùng chung (đơn vị chủ trì/phối hợp, sản phẩm, thời hạn) xuống từng dòng con, ghép mã nhiệm vụ (vd "1a", "12b"), nối lại các dòng bị PDF wrap chữ giữa dòng trong khi vẫn giữ nguyên gạch đầu dòng thật.
-
-Toàn bộ pipeline đã được kiểm chứng chạy đúng trên 2 file PDF có cấu trúc bảng khác nhau hoàn toàn (7 cột/header 2 dòng và 5 cột/header 1 dòng) — không cần code riêng cho từng loại file.
-
-## Cấu trúc thư mục
-
-```
-data/raw/         PDF gốc đầu vào (2 file mẫu: kh-cao-diem-100-ngay-c-s-tp-hn.pdf, CV 6582.pdf)
-data/output/      Kết quả xuất ra (CSV/JSON, không commit vào git)
-src/pdf_task_extractor/
-    locate_tables.py   Bước 1
-    extract_tables.py  Bước 2
-    normalize.py       Bước 3 (+ export_records dùng chung cho CSV/JSON)
-    pipeline.py        Nối Bước 1-2-3, xuất kết quả
-scripts/
-    run_extract.py     CLI chính thức
-tests/                 25 unit test cho 4 module
-notebooks/exploration.ipynb
-```
+Việc nhận diện bảng dựa vào header khớp các trường chuẩn (vd "Đơn vị chủ trì"/"Đơn vị thực hiện", "Đơn vị phối hợp") — không hard-code theo 1 mẫu cột cố định. Đã kiểm chứng chạy đúng trên 2 file PDF có cấu trúc bảng khác nhau hoàn toàn (7 cột/header 2 dòng và 5 cột/header 1 dòng).
 
 ## Cài đặt
 
@@ -42,28 +42,22 @@ pip install -r requirements.txt
 ## Sử dụng
 
 ```bash
-python scripts/run_extract.py --input "data/raw/kh-cao-diem-100-ngay-c-s-tp-hn.pdf" --output "data/output/kh277_normalized.csv"
-python scripts/run_extract.py --input "data/raw/CV 6582.pdf" --output "data/output/cv6582_normalized.json"
+python scripts/run_extract.py --input "data/raw/kh-cao-diem-100-ngay-c-s-tp-hn.pdf"
 ```
 
-**Định dạng output được chọn tự động theo đuôi file** truyền vào `--output` — không cần thêm flag nào khác:
+Một lệnh ghi ra cả 3 tầng. Các cờ khác:
 
-- Đuôi `.csv` → xuất CSV dạng phẳng bằng `pandas`, mỗi dòng 1 nhiệm vụ.
-- Đuôi `.json` → xuất JSON **gộp theo nhóm nhiệm vụ** (dùng `json.dump` chuẩn, không cần cài thêm thư viện) — xem cấu trúc ở mục Schema output bên dưới.
+| Cờ | Ý nghĩa |
+|---|---|
+| `--data-dir` | Thư mục gốc chứa các tầng (mặc định `data`) |
+| `--from-bronze` | Chạy lại từ bronze đã có, không đọc lại file nguồn — dùng khi debug bước xử lý |
 
-Nên ưu tiên dùng JSON khi cần xử lý tiếp bằng code (giữ đúng kiểu dữ liệu, `None` hiện thành `null` thay vì `NaN` gây khó đọc khi mở CSV bằng Excel/Jupyter; đồng thời có sẵn cấu trúc theo nhóm) — dùng CSV khi cần mở trực tiếp bằng Excel để xem/lọc bằng tay (dạng phẳng, không gộp nhóm).
-
-### Debug từng bước riêng lẻ
-
-Mỗi module đều chạy độc lập được, in kết quả trung gian ra màn hình để kiểm tra:
+### Debug từng module riêng lẻ
 
 ```bash
-python -m src.pdf_task_extractor.locate_tables "data/raw/kh-cao-diem-100-ngay-c-s-tp-hn.pdf"
-python -m src.pdf_task_extractor.extract_tables "data/raw/kh-cao-diem-100-ngay-c-s-tp-hn.pdf"
-python -m src.pdf_task_extractor.normalize "data/raw/kh-cao-diem-100-ngay-c-s-tp-hn.pdf" "data/output/kh277_normalized.csv"
+python -m src.task_extractor.pdf_tables "data/raw/kh-cao-diem-100-ngay-c-s-tp-hn.pdf"
+python -m src.task_extractor.read_pdf "data/raw/kh-cao-diem-100-ngay-c-s-tp-hn.pdf"
 ```
-
-Lệnh `normalize` ở trên cũng xuất được file đầy đủ như `run_extract.py` — dùng khi chỉ muốn chạy riêng Bước 3 để debug, nhưng nên dùng `scripts/run_extract.py` cho công việc thực tế.
 
 ## Chạy test
 
@@ -73,7 +67,7 @@ python -m pytest tests/ -v
 
 ## Schema output
 
-### CSV (dạng phẳng)
+### Tầng silver (bảng phẳng)
 
 | Field | Ý nghĩa |
 |---|---|
@@ -86,11 +80,11 @@ python -m pytest tests/ -v
 | `nhom_nhiem_vu` | Tên nhóm nhiệm vụ lớn mà dòng này thuộc về (nhiệm vụ độc lập thì bằng chính `ten_nhiem_vu` của nó) |
 | `so_nhom_nhiem_vu` | Số hiệu nhóm dạng số thuần, tiện sort/filter |
 
-Cột `tt`, `chi_tiet` chỉ dùng nội bộ trong quá trình xử lý, không xuất hiện trong CSV/JSON cuối cùng.
+Cột `tt`, `chi_tiet` chỉ tồn tại ở tầng bronze, không xuất hiện ở silver/gold.
 
-### JSON (gộp theo nhóm)
+### Tầng gold (gộp theo nhóm)
 
-JSON xuất ra là 1 mảng các nhóm, mỗi nhóm gồm tên nhóm, số hiệu nhóm, và mảng `data` chứa các nhiệm vụ con (đã bỏ 2 field `nhom_nhiem_vu`/`so_nhom_nhiem_vu` khỏi từng nhiệm vụ con vì đã có ở cấp nhóm). Nhiệm vụ độc lập trở thành 1 nhóm chỉ có 1 phần tử trong `data`:
+Mảng các nhóm, mỗi nhóm gồm tên nhóm, số hiệu nhóm, và mảng `data` chứa các nhiệm vụ con (đã bỏ 2 field `nhom_nhiem_vu`/`so_nhom_nhiem_vu` khỏi từng nhiệm vụ vì đã có ở cấp nhóm). Nhiệm vụ độc lập trở thành 1 nhóm chỉ có 1 phần tử:
 
 ```json
 [
@@ -107,30 +101,17 @@ JSON xuất ra là 1 mảng các nhóm, mỗi nhóm gồm tên nhóm, số hiệ
         "thoi_han": "30/8/2026"
       }
     ]
-  },
-  {
-    "nhom_nhiem_vu": "Tên nhiệm vụ độc lập",
-    "so_nhom_nhiem_vu": "8",
-    "data": [
-      {
-        "ma_nhiem_vu": "8",
-        "ten_nhiem_vu": "Tên nhiệm vụ độc lập",
-        "don_vi_chu_tri": "...",
-        "don_vi_phoi_hop": "...",
-        "san_pham": "...",
-        "thoi_han": "..."
-      }
-    ]
   }
 ]
 ```
 
 ## Dữ liệu mẫu
 
-- `data/raw/kh-cao-diem-100-ngay-c-s-tp-hn.pdf` — Kế hoạch triển khai đợt cao điểm 100 ngày chuyển đổi số Thành phố Hà Nội (bảng nhiệm vụ ở Phụ lục, 7 cột, header 2 dòng).
-- `data/raw/CV 6582.pdf` — Công văn Sở Y tế Hà Nội về di trú Hồ sơ sức khỏe điện tử (bảng "Kế hoạch sơ bộ di trú dữ liệu", 5 cột, header 1 dòng).
+- `data/raw/kh-cao-diem-100-ngay-c-s-tp-hn.pdf` — Kế hoạch đợt cao điểm 100 ngày chuyển đổi số TP Hà Nội (bảng nhiệm vụ ở Phụ lục, 7 cột, header 2 dòng).
+- `data/raw/CV 6582.pdf` — Công văn Sở Y tế Hà Nội về di trú Hồ sơ sức khỏe điện tử (5 cột, header 1 dòng).
 
 ## Giới hạn đã biết
 
-- Chỉ nhận diện được bảng có header chứa đủ 2 trường "đơn vị chủ trì" và "đơn vị phối hợp" (hoặc từ đồng nghĩa của chúng). File PDF không có cấu trúc phân công dạng bảng tương tự sẽ không trích xuất được gì.
-- Việc gộp dòng bị ngắt trang và nối dòng bị wrap chữ dựa trên các quy tắc suy ra từ 2 file mẫu hiện có; với file PDF có cách trình bày khác biệt lớn, nên kiểm tra lại kết quả trước khi dùng.
+- Chỉ đọc được **PDF có lớp text**. PDF scan (ảnh) không trích xuất được gì nếu chưa có OCR.
+- Chỉ nhận diện được bảng có header chứa đủ 2 trường "đơn vị chủ trì" và "đơn vị phối hợp" (hoặc từ đồng nghĩa).
+- Việc gộp dòng bị ngắt trang và nối dòng bị wrap chữ dựa trên quy tắc suy ra từ 2 file mẫu hiện có; với văn bản trình bày khác biệt lớn, nên kiểm tra lại kết quả trước khi dùng.

@@ -1,7 +1,7 @@
 """
-Bước 3: Loại dòng nhóm cha, kế thừa các cột dùng chung xuống dòng con.
+Chuyển dòng thô (bronze) thành bản ghi nhiệm vụ chuẩn (silver).
 
-PDF gốc dùng merged cell theo nhóm nhiệm vụ: một số cột (đơn vị chủ trì,
+Văn bản gốc dùng merged cell theo nhóm nhiệm vụ: một số cột (đơn vị chủ trì,
 đơn vị phối hợp, sản phẩm, thời hạn) chỉ được ghi 1 lần ở dòng đầu nhóm,
 các dòng con bị trống ở đúng những cột đó dù thực chất áp dụng chung. Dòng
 nhóm cha được nhận diện bằng "tt" rỗng và "chi_tiet" là số trần (vd "1",
@@ -29,15 +29,6 @@ Với nhiệm vụ độc lập (không có dòng con), "nhom_nhiem_vu" và
 "so_nhom_nhiem_vu" được điền bằng chính tên/số của nó — vì nó tự là 1 nhóm
 chỉ gồm 1 nhiệm vụ, không phải "không thuộc nhóm nào".
 
-Cuối cùng, hàm "export_records" khi xuất JSON sẽ gộp danh sách nhiệm vụ
-phẳng ở trên thành danh sách theo nhóm (mỗi nhóm 1 object gồm tên nhóm,
-số hiệu nhóm, và mảng "data" chứa các nhiệm vụ con — đã bỏ 2 field
-"nhom_nhiem_vu"/"so_nhom_nhiem_vu" khỏi từng nhiệm vụ con vì đã có ở cấp
-nhóm, tránh lặp lại). Nhiệm vụ độc lập trở thành 1 nhóm chỉ có 1 phần tử
-trong "data". Xuất CSV thì vẫn giữ nguyên dạng phẳng như cũ vì bảng phẳng
-không hợp để chứa cấu trúc lồng nhau.
-
-
 Chưa xử lý ở bước này: dòng "mồ côi" do PDF tách rời 1 câu bị wrap thành
 dòng riêng (không khớp mẫu số trần lẫn chữ cái) — các dòng này đi qua
 nguyên trạng, "ma_nhiem_vu" của chúng là None vì không xác định được.
@@ -63,16 +54,16 @@ TEXT_FIELDS_TO_CLEAN = [
     "nhom_nhiem_vu",
 ]
 
-_BARE_NUMBER = re.compile(r"^\d+$")
+_PLAIN_NUMBER = re.compile(r"^\d+$")
 _LETTER_CHI_TIET = re.compile(r"^([a-zđ])\)$")
 _BULLET_PREFIX = re.compile(r"^-\s*")
 
 
-def _is_bare_number(chi_tiet) -> bool:
-    return bool(_BARE_NUMBER.match((chi_tiet or "").strip()))
+def _is_plain_number(chi_tiet) -> bool:
+    return bool(_PLAIN_NUMBER.match((chi_tiet or "").strip()))
 
 
-def _letter_suffix(chi_tiet):
+def _letter_segment(chi_tiet):
     match = _LETTER_CHI_TIET.match((chi_tiet or "").strip())
     return match.group(1) if match else None
 
@@ -93,14 +84,14 @@ def _rejoin_wrapped_lines(text):
     return "\n".join(merged)
 
 
-def apply_group_inheritance(records: list) -> list:
+def build_tasks(rows: list) -> list:
     """Loại dòng nhóm cha, kế thừa các cột dùng chung xuống dòng con cùng nhóm."""
     result = []
     current_group = None
 
-    for record in records:
+    for record in rows:
         chi_tiet = record.get("chi_tiet")
-        is_top_level = _is_bare_number(chi_tiet)
+        is_top_level = _is_plain_number(chi_tiet)
 
         if is_top_level and not record.get("tt"):
             # Dòng nhóm cha thuần túy (có dòng con a)/b)/c)... phía dưới).
@@ -110,7 +101,7 @@ def apply_group_inheritance(records: list) -> list:
             continue
 
         new_record = dict(record)
-        letter = _letter_suffix(chi_tiet)
+        letter = _letter_segment(chi_tiet)
 
         if is_top_level:
             # Nhiệm vụ độc lập (không có dòng con) — tự nó là 1 nhóm.
@@ -141,63 +132,3 @@ def apply_group_inheritance(records: list) -> list:
         result.append(new_record)
 
     return result
-
-
-def group_by_nhiem_vu(records: list) -> list:
-    """Gộp danh sách nhiệm vụ phẳng thành danh sách theo nhóm: mỗi nhóm là 1
-    object {"nhom_nhiem_vu", "so_nhom_nhiem_vu", "data": [...]}, giữ đúng thứ
-    tự nhóm xuất hiện đầu tiên trong danh sách gốc. Nhiệm vụ độc lập (tự là 1
-    nhóm) trở thành 1 nhóm chỉ có 1 phần tử trong "data"."""
-    groups = []
-    group_by_key = {}
-
-    for record in records:
-        key = (record.get("so_nhom_nhiem_vu"), record.get("nhom_nhiem_vu"))
-        group = group_by_key.get(key)
-        if group is None:
-            group = {
-                "nhom_nhiem_vu": record.get("nhom_nhiem_vu"),
-                "so_nhom_nhiem_vu": record.get("so_nhom_nhiem_vu"),
-                "data": [],
-            }
-            group_by_key[key] = group
-            groups.append(group)
-
-        child = {
-            field: value
-            for field, value in record.items()
-            if field not in ("nhom_nhiem_vu", "so_nhom_nhiem_vu")
-        }
-        group["data"].append(child)
-
-    return groups
-
-
-def export_records(records: list, output_path: str) -> None:
-    """Xuất danh sách record ra file. Định dạng chọn theo đuôi output_path:
-    ".json" -> JSON gộp theo nhóm (qua group_by_nhiem_vu), còn lại -> CSV
-    dạng phẳng (qua pandas)."""
-    import json
-
-    if output_path.lower().endswith(".json"):
-        grouped = group_by_nhiem_vu(records)
-        with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(grouped, f, ensure_ascii=False, indent=2)
-    else:
-        import pandas as pd
-
-        pd.DataFrame(records).to_csv(output_path, index=False, encoding="utf-8-sig")
-
-
-if __name__ == "__main__":
-    import sys
-
-    from .extract_tables import extract_from_pdf
-
-    default_path = "data/raw/kh-cao-diem-100-ngay-c-s-tp-hn.pdf"
-    pdf_path = sys.argv[1] if len(sys.argv) > 1 else default_path
-    output_path = sys.argv[2] if len(sys.argv) > 2 else "data/output/normalized.csv"
-
-    normalized = apply_group_inheritance(extract_from_pdf(pdf_path))
-    export_records(normalized, output_path)
-    print(f"Da xuat {len(normalized)} record ra {output_path}", file=sys.stderr)

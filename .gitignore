@@ -11,9 +11,13 @@ venv/
 # Pytest
 .pytest_cache/
 
-# Output data (giữ lại cấu trúc thư mục, bỏ qua nội dung sinh ra)
-data/output/*
-!data/output/.gitkeep
+# Dữ liệu sinh ra ở các tầng (giữ lại cấu trúc thư mục, bỏ qua nội dung)
+data/bronze/*
+!data/bronze/.gitkeep
+data/silver/*
+!data/silver/.gitkeep
+data/gold/*
+!data/gold/.gitkeep
 
 # OS
 .DS_Store
