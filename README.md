@@ -91,18 +91,27 @@ python -m pytest tests/ -v
 
 ### Tầng silver (bảng phẳng)
 
+Mỗi dòng là 1 nhiệm vụ, có con trỏ tới nhiệm vụ cha — nạp thẳng vào DB/DataFrame để join, lọc, dựng cây.
+
 | Field | Ý nghĩa |
 |---|---|
-| `ma_nhiem_vu` | Mã nhiệm vụ, vd "1a", "12b" (số nhóm + chữ cái con); nhiệm vụ độc lập thì là số riêng của nó, vd "8" |
+| `ma_nhiem_vu` | **Khóa chính.** Vd "1a", "12b" (PDF), "KH20_TT_N01.1" (mã phân cấp), "13.5" (số thập phân). Đảm bảo không trùng lặp |
+| `ma_nhiem_vu_cha` | **Khóa ngoại** tới nhiệm vụ cha. Rỗng nếu mọi tổ tiên chỉ là nhãn nhóm. Luôn tra được — không bao giờ trỏ vào dòng không có trong kết quả |
+| `cap_do` | Độ sâu trong cây (1 = cấp ngoài cùng) |
+| `co_nhiem_vu_con` | Có nhiệm vụ con nằm dưới hay không |
 | `ten_nhiem_vu` | Tên/nội dung nhiệm vụ |
 | `don_vi_chu_tri` | Đơn vị chủ trì |
 | `don_vi_phoi_hop` | Đơn vị phối hợp |
-| `san_pham` | Sản phẩm đầu ra (nếu file gốc có cột này) |
+| `san_pham` | Sản phẩm đầu ra (nếu văn bản có cột này) |
 | `thoi_han` | Thời hạn hoặc số ngày dự kiến |
-| `nhom_nhiem_vu` | Tên nhóm nhiệm vụ lớn mà dòng này thuộc về (nhiệm vụ độc lập thì bằng chính `ten_nhiem_vu` của nó) |
-| `so_nhom_nhiem_vu` | Số hiệu nhóm dạng số thuần, tiện sort/filter |
+| `ket_qua`, `ghi_chu` | Kết quả cần đạt và ghi chú (nếu văn bản có) |
+| `nhom_nhiem_vu` | Tên nhóm ngoài cùng mà nhiệm vụ này thuộc về |
+| `so_nhom_nhiem_vu` | Mã của nhóm ngoài cùng, tiện sort/filter |
+| `nguon_tai_lieu` | Tên file gốc — để truy vết và để AI agent trích dẫn nguồn |
 
-Cột `tt`, `chi_tiet` chỉ tồn tại ở tầng bronze, không xuất hiện ở silver/gold.
+Cột `tt`, `chi_tiet`, `ma_goc` chỉ tồn tại ở tầng bronze, không xuất hiện ở silver/gold.
+
+**Văn bản không có cột mã phân cấp nào** (mọi dòng ngang hàng) được đánh số thứ tự theo thứ tự dòng, để mọi nhiệm vụ đều có mã ổn định tham chiếu tới. Số thứ tự chỉ sinh ra khi *không* dòng nào đọc được mã, nên không bao giờ đụng phải mã thật của văn bản có phân cấp.
 
 ### Tầng gold (gộp theo nhóm)
 
@@ -115,12 +124,16 @@ Mảng các nhóm, mỗi nhóm gồm tên nhóm, số hiệu nhóm, và mảng `
     "so_nhom_nhiem_vu": "1",
     "data": [
       {
-        "ma_nhiem_vu": "1a",
         "ten_nhiem_vu": "...",
         "don_vi_chu_tri": "Sở Tài chính",
         "don_vi_phoi_hop": "Sở Khoa học và Công nghệ",
         "san_pham": "...",
-        "thoi_han": "30/8/2026"
+        "thoi_han": "30/8/2026",
+        "ma_nhiem_vu": "1a",
+        "ma_nhiem_vu_cha": null,
+        "cap_do": 2,
+        "co_nhiem_vu_con": false,
+        "nguon_tai_lieu": "kh-cao-diem-100-ngay-c-s-tp-hn.pdf"
       }
     ]
   }

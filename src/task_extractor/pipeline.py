@@ -60,6 +60,10 @@ def run_pipeline(input_path: str, data_dir: str = "data", from_bronze: bool = Fa
 
     profile = detect_profile(rows, PROFILES_BY_SUFFIX[suffix])
     tasks = build_tasks(rows, profile)
+
+    # Nguồn gốc chỉ tầng này biết; cần cho việc truy vết và để AI agent trích dẫn.
+    for task in tasks:
+        task["nguon_tai_lieu"] = Path(input_path).name
     write_csv(tasks, Path(data_dir) / SILVER / f"{name}.csv")
     write_json(tasks, Path(data_dir) / SILVER / f"{name}.json")
     write_json(group_tasks(tasks), Path(data_dir) / GOLD / f"{name}.json")

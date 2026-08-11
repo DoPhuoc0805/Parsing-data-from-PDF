@@ -110,17 +110,18 @@ def test_wrapped_lines_are_rejoined_but_bullets_are_kept_separate():
     assert "thời gian giải quyết, 50% thành phần hồ sơ." in lines[-1]
 
 
-_ADDED_FIELDS = ["nhom_nhiem_vu", "so_nhom_nhiem_vu", "ma_nhiem_vu"]
 _DROPPED_FIELDS = ["tt", "chi_tiet"]
 
 
-def test_cv6582_records_have_no_group_context():
+def test_cv6582_rows_all_survive_as_standalone_tasks():
+    # Van ban khong co phan cap: khong dong nao bi loai, moi dong tu la 1 nhom.
     rows = read_pdf(str(CV6582_PDF))
     tasks = build_tasks(rows)
 
     assert len(tasks) == len(rows) == 12
     for task in tasks:
-        assert all(task[field] is None for field in _ADDED_FIELDS)
+        assert task["nhom_nhiem_vu"] == task["ten_nhiem_vu"]
+        assert task["so_nhom_nhiem_vu"] == task["ma_nhiem_vu"]
         assert all(field not in task for field in _DROPPED_FIELDS)
 
 
@@ -279,6 +280,58 @@ def test_well_filled_deliverable_column_is_not_warned_about(caplog):
         build_tasks(read_excel(str(TEST2_XLSX)), DOTTED_CODE)
 
     assert "chi duoc dien" not in caplog.text
+
+
+# --------------------------------------------------------------- schema phân cấp
+def test_parent_pointer_only_targets_tasks_that_exist_in_the_output():
+    # Khoa ngoai phai luon tra duoc: khong duoc tro toi dong da bi loai lam nhan nhom.
+    tasks = _test2_tasks()
+    codes = {t["ma_nhiem_vu"] for t in tasks}
+    dangling = [t["ma_nhiem_vu"] for t in tasks if t["ma_nhiem_vu_cha"] and t["ma_nhiem_vu_cha"] not in codes]
+
+    assert dangling == []
+
+
+def test_task_code_is_usable_as_a_primary_key():
+    for tasks in (_test2_tasks(), _test3_tasks(), _kh277_tasks()):
+        codes = [t["ma_nhiem_vu"] for t in tasks]
+        assert len(codes) == len(set(codes))
+
+
+def test_parent_pointer_links_a_subtask_to_its_parent_task():
+    task = _by_ma(_test2_tasks(), "KH20_TT_N19.1.1")
+    assert task["ma_nhiem_vu_cha"] == "KH20_TT_N19.1"
+    assert task["cap_do"] == 3
+    assert task["co_nhiem_vu_con"] is False
+
+
+def test_parent_pointer_is_empty_when_every_ancestor_is_only_a_label():
+    # N19.1 la nhiem vu that nhung to tien N19 chi la nhan nhom -> khong co cha.
+    task = _by_ma(_test2_tasks(), "KH20_TT_N19.1")
+    assert task["ma_nhiem_vu_cha"] is None
+    assert task["co_nhiem_vu_con"] is True
+
+
+def test_parent_pointer_skips_a_level_missing_from_the_document():
+    # Van ban sot dong N05.1; N05 lai la nhan nhom -> khong co cha nao tra duoc.
+    task = _by_ma(_test2_tasks(), "KH20_TT_N05.1.1")
+    assert task["ma_nhiem_vu_cha"] is None
+    assert task["cap_do"] == 3
+
+
+def test_flat_document_gets_sequential_codes():
+    # CV6582 khong co cot ma phan cap nao; van can ma on dinh de tham chieu toi.
+    tasks = build_tasks(read_pdf(str(CV6582_PDF)))
+    assert [t["ma_nhiem_vu"] for t in tasks] == [str(i) for i in range(1, 13)]
+    assert all(t["cap_do"] == 1 for t in tasks)
+    assert all(t["co_nhiem_vu_con"] is False for t in tasks)
+
+
+def test_sequential_numbering_does_not_apply_when_some_codes_are_readable():
+    # Van ban co phan cap that thi khong duoc danh so de tranh dung ma that.
+    tasks = _kh277_tasks()
+    assert _by_ma(tasks, "1a")["cap_do"] == 2
+    assert _by_ma(tasks, "8")["cap_do"] == 1
 
 
 def test_test3_duplicate_codes_are_made_unique():

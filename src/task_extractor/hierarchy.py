@@ -42,7 +42,7 @@ def parse_absolute_paths(codes: list, separator: str = ".", self_segment=None) -
     self_segment: đoạn cuối mang nghĩa "chính nó" chứ không phải 1 cấp con
     (vd test_3 dùng "1.0" để chỉ nhiệm vụ số 1, không phải con thứ 0 của nó).
     """
-    paths = []
+    paths: list = []
     for code in codes:
         text = str(code).strip() if code is not None else ""
         if not text:
@@ -120,11 +120,13 @@ def derive_parent_paths(paths: list) -> set:
 
 
 def nearest_existing_ancestor(path: tuple, known: set):
-    """Tổ tiên gần nhất thực sự có dòng trong tài liệu.
+    """Tổ tiên gần nhất nằm trong tập `known`.
 
-    Văn bản có thể sót cấp trung gian (vd có N05 và N05.1.1 nhưng thiếu N05.1);
-    trỏ lên tổ tiên gần nhất còn tồn tại để khóa ngoại luôn tra được, thay vì
-    để con trỏ treo hoặc bịa ra một nhiệm vụ không có thật.
+    Một tổ tiên có thể vắng mặt vì hai lý do: văn bản sót cấp trung gian (vd có
+    N05 và N05.1.1 nhưng thiếu N05.1), hoặc dòng đó chỉ là nhãn nhóm nên không
+    vào kết quả. Cả hai trường hợp đều phải bỏ qua để khóa ngoại luôn tra được
+    — thay vì để con trỏ treo hoặc bịa ra một nhiệm vụ không có thật. Truyền
+    vào tập mã **thực sự có trong kết quả**, không phải mọi mã đọc được.
     """
     for depth in range(len(path) - 1, 0, -1):
         if path[:depth] in known:

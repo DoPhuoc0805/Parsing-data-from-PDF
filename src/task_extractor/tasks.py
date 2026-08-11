@@ -39,6 +39,7 @@ from .hierarchy import (
     check_paths,
     dedupe_paths,
     derive_parent_paths,
+    nearest_existing_ancestor,
     parse_absolute_paths,
     parse_relative_paths,
 )
@@ -96,6 +97,19 @@ def _has_assignment(row: dict) -> bool:
     return any(row.get(field) for field in ASSIGNMENT_FIELDS)
 
 
+def _number_flat_document(paths: list) -> list:
+    """Văn bản không có cột mã phân cấp nào thì đánh số thứ tự theo thứ tự dòng.
+
+    Mọi dòng đều là nhiệm vụ ngang hàng, nhưng vẫn cần mã ổn định để tham
+    chiếu tới — nhất là khi kết quả được đưa cho hệ thống khác hoặc AI agent
+    dùng. Chỉ áp dụng khi KHÔNG dòng nào đọc được mã, để số thứ tự sinh ra
+    không đụng phải mã thật của văn bản có phân cấp.
+    """
+    if any(paths):
+        return paths
+    return [(str(index),) for index in range(1, len(paths) + 1)]
+
+
 def _column_exists(rows: list, field: str) -> bool:
     """Cột vắng hẳn khỏi văn bản khác với cột có mà ô để trống: phần đọc file
     chỉ tạo trường cho cột thật sự có trong header, nên kiểm tra bằng key."""
@@ -149,7 +163,7 @@ def detect_profile(rows: list, candidates) -> Profile:
 
 def build_tasks(rows: list, profile: Profile = NUMBER_LETTER) -> list:
     """Dựng danh sách nhiệm vụ chuẩn từ các dòng thô đã đọc được."""
-    paths = dedupe_paths(_parse_paths(rows, profile))
+    paths = dedupe_paths(_number_flat_document(_parse_paths(rows, profile)))
     check_paths(paths)
 
     parent_paths = derive_parent_paths(paths)
@@ -163,9 +177,17 @@ def build_tasks(rows: list, profile: Profile = NUMBER_LETTER) -> list:
             deliverable,
         )
 
+    # Xác định trước dòng nào là nhãn nhóm, để con trỏ cha chỉ trỏ tới nhiệm vụ
+    # thật sự có mặt trong kết quả — nhãn nhóm bị loại thì không thể tra được.
+    is_label = [
+        bool(path) and path in parent_paths and _is_group_label(row, profile, use_deliverable)
+        for row, path in zip(rows, paths)
+    ]
+    task_paths = {path for path, label in zip(paths, is_label) if path and not label}
+
     result = []
-    for row, path in zip(rows, paths):
-        if path in parent_paths and _is_group_label(row, profile, use_deliverable):
+    for row, path, label in zip(rows, paths, is_label):
+        if label:
             continue
 
         task = dict(row)
@@ -181,13 +203,20 @@ def build_tasks(rows: list, profile: Profile = NUMBER_LETTER) -> list:
                         task[field] = ancestor.get(field)
 
             root = row_by_path.get(path[:1])
+            parent = nearest_existing_ancestor(path, task_paths)
             task["nhom_nhiem_vu"] = root.get("ten_nhiem_vu") if root else None
             task["so_nhom_nhiem_vu"] = path[0]
             task["ma_nhiem_vu"] = profile.join_with.join(path)
+            task["ma_nhiem_vu_cha"] = profile.join_with.join(parent) if parent else None
+            task["cap_do"] = len(path)
+            task["co_nhiem_vu_con"] = path in parent_paths
         else:
             task["nhom_nhiem_vu"] = None
             task["so_nhom_nhiem_vu"] = None
             task["ma_nhiem_vu"] = None
+            task["ma_nhiem_vu_cha"] = None
+            task["cap_do"] = None
+            task["co_nhiem_vu_con"] = False
 
         for field in profile.drop_fields:
             task.pop(field, None)
