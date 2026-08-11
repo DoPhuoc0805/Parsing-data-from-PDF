@@ -31,6 +31,16 @@ def test_tt_and_chi_tiet_columns_are_removed():
         assert "chi_tiet" not in task
 
 
+def test_tt_column_is_no_longer_needed_to_tell_group_from_task():
+    # Truoc day phai dua vao cot "tt" de phan biet dong tieu de nhom voi nhiem
+    # vu doc lap (ca hai deu co chi_tiet la so tran). Mo hinh path suy ra tu
+    # "co dong con hay khong" nen bo han cot tt van cho ket qua y het.
+    rows = read_pdf(str(KH277_PDF))
+    without_tt = [{k: v for k, v in row.items() if k != "tt"} for row in rows]
+
+    assert build_tasks(without_tt) == build_tasks(rows)
+
+
 def test_group_with_shared_coordination_and_deadline_is_inherited():
     children = [
         t for t in _kh277_tasks() if (t.get("nhom_nhiem_vu") or "").startswith("Làm sạch")

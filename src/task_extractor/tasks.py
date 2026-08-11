@@ -1,48 +1,47 @@
 """
 Chuyển dòng thô (bronze) thành bản ghi nhiệm vụ chuẩn (silver).
 
-Văn bản gốc dùng merged cell theo nhóm nhiệm vụ: một số cột (đơn vị chủ trì,
-đơn vị phối hợp, sản phẩm, thời hạn) chỉ được ghi 1 lần ở dòng đầu nhóm,
-các dòng con bị trống ở đúng những cột đó dù thực chất áp dụng chung. Dòng
-nhóm cha được nhận diện bằng "tt" rỗng và "chi_tiet" là số trần (vd "1",
-"12") — khác với dòng con dùng "chi_tiet" dạng chữ cái (vd "a)").
+Việc xác định nhiệm vụ cha/con dùng chung cơ chế path ở hierarchy.py, cấu hình
+theo từng kiểu mã hóa ở profiles.py — module này lo phần còn lại: loại dòng
+nhãn nhóm, kế thừa cột dùng chung, gắn ngữ cảnh nhóm và làm sạch nội dung.
 
-Dòng nhóm cha không có đơn vị chủ trì cụ thể nên không phải 1 nhiệm vụ
-được giao thực sự; bị loại khỏi kết quả cuối, chỉ giữ tên nhóm làm ngữ
-cảnh (field "nhom_nhiem_vu") gắn vào từng dòng con.
+**Loại dòng nhãn nhóm.** Văn bản thường có dòng chỉ mang tên nhóm, không phải
+một việc được giao cho ai. Dòng nào có nhiệm vụ con nằm dưới thì được coi là
+nhãn nhóm và không xuất hiện ở kết quả cuối — trừ khi profile khai
+keep_parent_as_task, dành cho văn bản mà dòng cha thực sự là một nhiệm vụ tổng
+có đơn vị chủ trì riêng.
 
-Quy tắc kế thừa: chỉ điền giá trị từ dòng cha khi ô của dòng con đang
-rỗng, không bao giờ ghi đè giá trị dòng con đã có sẵn — quy tắc này áp
-dụng đồng nhất cho cả 4 cột (kể cả đơn vị chủ trì, vì đã kiểm chứng có
-nhóm mà đơn vị chủ trì cũng dùng chung, không phải lúc nào cũng riêng
-theo từng dòng con).
+**Kế thừa cột dùng chung.** Văn bản gốc dùng merged cell theo nhóm: một số cột
+(đơn vị chủ trì, đơn vị phối hợp, sản phẩm, thời hạn) chỉ ghi 1 lần ở dòng cha,
+các dòng con bị trống dù thực chất áp dụng chung. Dòng con leo ngược lên các
+tổ tiên (gần trước, xa sau) để lấy giá trị, nhưng **chỉ điền khi ô của nó đang
+rỗng, không bao giờ ghi đè giá trị đã có sẵn** — nhờ quy tắc này mà cùng một
+cách xử lý đúng cho cả nhóm dùng chung đơn vị chủ trì lẫn nhóm mà mỗi dòng con
+có đơn vị chủ trì riêng.
 
-Ngoài ra, dòng nhóm cha còn giữ **số hiệu nhóm** (chính "chi_tiet" của dòng
-cha, vd "1", "12") — dùng để ghép thành mã nhiệm vụ đầy đủ cho dòng con
-(field "ma_nhiem_vu", vd "1a", "12b": số hiệu nhóm + chữ cái con, bỏ dấu
-")"). Với nhiệm vụ độc lập (không có dòng con), mã nhiệm vụ chính là số
-hiệu của nó (vd "8"). Field "so_nhom_nhiem_vu" giữ số hiệu nhóm dạng số
-thuần (tách riêng khỏi "nhom_nhiem_vu" là tên nhóm dạng câu) để dễ
-sort/group.
+**Ngữ cảnh nhóm.** Mỗi nhiệm vụ mang theo tên và số hiệu của **tổ tiên gốc**
+(đoạn đầu tiên của path). Nhiệm vụ độc lập không có dòng con thì tổ tiên gốc
+chính là nó, nên nó tự là một nhóm gồm đúng một nhiệm vụ — không phải "không
+thuộc nhóm nào".
 
-Với nhiệm vụ độc lập (không có dòng con), "nhom_nhiem_vu" và
-"so_nhom_nhiem_vu" được điền bằng chính tên/số của nó — vì nó tự là 1 nhóm
-chỉ gồm 1 nhiệm vụ, không phải "không thuộc nhóm nào".
-
-Chưa xử lý ở bước này: dòng "mồ côi" do PDF tách rời 1 câu bị wrap thành
-dòng riêng (không khớp mẫu số trần lẫn chữ cái) — các dòng này đi qua
-nguyên trạng, "ma_nhiem_vu" của chúng là None vì không xác định được.
-
-Cuối cùng, các field text được nối lại dòng: PDF wrap chữ giữa dòng (vd
-"Sở\nKHCN") không mang ý nghĩa xuống dòng thật nên được nối bằng khoảng
-trắng; riêng dòng nào bắt đầu bằng "-" (gạch đầu dòng thật, dùng liệt kê
-nhiều ý trong 1 ô) được giữ nguyên xuống dòng để không mất định dạng danh
-sách.
+**Làm sạch nội dung.** PDF wrap chữ giữa dòng (vd "Sở\nKHCN") không mang ý
+nghĩa xuống dòng thật nên được nối bằng khoảng trắng; riêng dòng bắt đầu bằng
+"-" (gạch đầu dòng thật, dùng liệt kê nhiều ý trong 1 ô) được giữ nguyên xuống
+dòng để không mất định dạng danh sách.
 """
 
 from __future__ import annotations
 
 import re
+
+from .hierarchy import (
+    check_paths,
+    dedupe_paths,
+    derive_parent_paths,
+    parse_absolute_paths,
+    parse_relative_paths,
+)
+from .profiles import NUMBER_LETTER, Profile
 
 INHERITABLE_FIELDS = ["don_vi_chu_tri", "don_vi_phoi_hop", "san_pham", "thoi_han"]
 TEXT_FIELDS_TO_CLEAN = [
@@ -54,18 +53,7 @@ TEXT_FIELDS_TO_CLEAN = [
     "nhom_nhiem_vu",
 ]
 
-_PLAIN_NUMBER = re.compile(r"^\d+$")
-_LETTER_CHI_TIET = re.compile(r"^([a-zđ])\)$")
 _BULLET_PREFIX = re.compile(r"^-\s*")
-
-
-def _is_plain_number(chi_tiet) -> bool:
-    return bool(_PLAIN_NUMBER.match((chi_tiet or "").strip()))
-
-
-def _letter_segment(chi_tiet):
-    match = _LETTER_CHI_TIET.match((chi_tiet or "").strip())
-    return match.group(1) if match else None
 
 
 def _rejoin_wrapped_lines(text):
@@ -84,51 +72,57 @@ def _rejoin_wrapped_lines(text):
     return "\n".join(merged)
 
 
-def build_tasks(rows: list) -> list:
-    """Loại dòng nhóm cha, kế thừa các cột dùng chung xuống dòng con cùng nhóm."""
+def _parse_paths(rows: list, profile: Profile) -> list:
+    codes = [row.get(profile.code_field) for row in rows]
+    if profile.parser == "absolute":
+        return parse_absolute_paths(codes, profile.separator, profile.self_segment)
+    if profile.parser == "relative":
+        return parse_relative_paths(codes, list(profile.level_patterns))
+    raise ValueError(f"Profile {profile.name!r} khai parser khong hop le: {profile.parser!r}")
+
+
+def build_tasks(rows: list, profile: Profile = NUMBER_LETTER) -> list:
+    """Dựng danh sách nhiệm vụ chuẩn từ các dòng thô đã đọc được."""
+    paths = dedupe_paths(_parse_paths(rows, profile))
+    check_paths(paths)
+
+    parent_paths = derive_parent_paths(paths)
+    row_by_path = {path: row for path, row in zip(paths, rows) if path}
+
     result = []
-    current_group = None
-
-    for record in rows:
-        chi_tiet = record.get("chi_tiet")
-        is_top_level = _is_plain_number(chi_tiet)
-
-        if is_top_level and not record.get("tt"):
-            # Dòng nhóm cha thuần túy (có dòng con a)/b)/c)... phía dưới).
-            current_group = {field: record.get(field) for field in INHERITABLE_FIELDS}
-            current_group["ten_nhiem_vu"] = record.get("ten_nhiem_vu")
-            current_group["so_thu_tu"] = (chi_tiet or "").strip()
+    for row, path in zip(rows, paths):
+        is_group_label = path in parent_paths and not profile.keep_parent_as_task
+        if is_group_label:
             continue
 
-        new_record = dict(record)
-        letter = _letter_segment(chi_tiet)
+        task = dict(row)
 
-        if is_top_level:
-            # Nhiệm vụ độc lập (không có dòng con) — tự nó là 1 nhóm.
-            ma = (chi_tiet or "").strip()
-            new_record["nhom_nhiem_vu"] = record.get("ten_nhiem_vu")
-            new_record["so_nhom_nhiem_vu"] = ma
-            new_record["ma_nhiem_vu"] = ma
-            current_group = None
-        elif current_group is not None:
-            for field in INHERITABLE_FIELDS:
-                if not new_record.get(field):
-                    new_record[field] = current_group[field]
-            new_record["nhom_nhiem_vu"] = current_group["ten_nhiem_vu"]
-            new_record["so_nhom_nhiem_vu"] = current_group["so_thu_tu"]
-            new_record["ma_nhiem_vu"] = current_group["so_thu_tu"] + letter if letter else None
+        if path:
+            # Leo ngược lên tổ tiên (gần trước, xa sau) lấy giá trị cho ô đang rỗng.
+            for depth in range(len(path) - 1, 0, -1):
+                ancestor = row_by_path.get(path[:depth])
+                if ancestor is None:
+                    continue
+                for field in INHERITABLE_FIELDS:
+                    if not task.get(field):
+                        task[field] = ancestor.get(field)
+
+            root = row_by_path.get(path[:1])
+            task["nhom_nhiem_vu"] = root.get("ten_nhiem_vu") if root else None
+            task["so_nhom_nhiem_vu"] = path[0]
+            task["ma_nhiem_vu"] = profile.join_with.join(path)
         else:
-            new_record["nhom_nhiem_vu"] = None
-            new_record["so_nhom_nhiem_vu"] = None
-            new_record["ma_nhiem_vu"] = None
+            task["nhom_nhiem_vu"] = None
+            task["so_nhom_nhiem_vu"] = None
+            task["ma_nhiem_vu"] = None
 
-        new_record.pop("tt", None)
-        new_record.pop("chi_tiet", None)
+        for field in profile.drop_fields:
+            task.pop(field, None)
 
         for field in TEXT_FIELDS_TO_CLEAN:
-            if field in new_record:
-                new_record[field] = _rejoin_wrapped_lines(new_record[field])
+            if field in task:
+                task[field] = _rejoin_wrapped_lines(task[field])
 
-        result.append(new_record)
+        result.append(task)
 
     return result

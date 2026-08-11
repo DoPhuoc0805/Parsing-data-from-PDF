@@ -13,6 +13,7 @@ Kết quả ghi ra 3 tầng, dùng chung tên file gốc:
 """
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 
@@ -35,6 +36,9 @@ def main() -> None:
         help="Chay lai tu tang bronze da co, khong doc lai file nguon (dung khi debug)",
     )
     args = parser.parse_args()
+
+    # Canh bao ve toan ven du lieu (ma trung, thieu cap cha) hien ra stderr.
+    logging.basicConfig(level=logging.WARNING, format="[canh bao] %(message)s")
 
     tasks = run_pipeline(args.input, args.data_dir, from_bronze=args.from_bronze)
     name = Path(args.input).stem
