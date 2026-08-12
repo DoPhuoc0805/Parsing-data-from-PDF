@@ -1,41 +1,45 @@
-"""Unit test cho pipeline.py: nối Bước 1-2-3 và xuất file."""
+"""Unit test cho pipeline.py: nối các tầng raw -> bronze -> silver -> gold."""
 
 import json
 from pathlib import Path
 
 import pandas as pd
 
-from src.pdf_task_extractor.pipeline import run_pipeline
+from src.task_extractor.pipeline import run_pipeline
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "raw"
 KH277_PDF = DATA_DIR / "kh-cao-diem-100-ngay-c-s-tp-hn.pdf"
 CV6582_PDF = DATA_DIR / "CV 6582.pdf"
 
 
-def test_run_pipeline_exports_json(tmp_path):
-    output_path = tmp_path / "kh277.json"
-    records = run_pipeline(str(KH277_PDF), str(output_path))
+def test_run_pipeline_writes_all_three_layers(tmp_path):
+    tasks = run_pipeline(str(KH277_PDF), str(tmp_path))
+    name = KH277_PDF.stem
 
-    assert len(records) == 33
-    with open(output_path, encoding="utf-8") as f:
-        exported = json.load(f)
+    assert len(tasks) == 33
 
-    assert isinstance(exported, list)
-    total_tasks = sum(len(group["data"]) for group in exported)
-    assert total_tasks == len(records)
-    for group in exported:
+    bronze = json.loads((tmp_path / "bronze" / f"{name}.json").read_text(encoding="utf-8"))
+    assert len(bronze) == 41  # dòng thô, chưa loại dòng nhóm cha
+    assert "chi_tiet" in bronze[0]
+
+    silver = json.loads((tmp_path / "silver" / f"{name}.json").read_text(encoding="utf-8"))
+    assert silver == tasks  # silver giữ dạng phẳng
+
+    df = pd.read_csv(tmp_path / "silver" / f"{name}.csv")
+    assert len(df) == 33
+    assert "ma_nhiem_vu" in df.columns
+
+    gold = json.loads((tmp_path / "gold" / f"{name}.json").read_text(encoding="utf-8"))
+    assert sum(len(group["data"]) for group in gold) == len(tasks)
+    for group in gold:
         assert "nhom_nhiem_vu" in group
-        assert "so_nhom_nhiem_vu" in group
         for task in group["data"]:
             assert "nhom_nhiem_vu" not in task
-            assert "so_nhom_nhiem_vu" not in task
 
 
-def test_run_pipeline_exports_csv(tmp_path):
-    output_path = tmp_path / "cv6582.csv"
-    records = run_pipeline(str(CV6582_PDF), str(output_path))
+def test_run_pipeline_from_bronze_skips_reading_source(tmp_path):
+    first = run_pipeline(str(CV6582_PDF), str(tmp_path))
+    again = run_pipeline(str(CV6582_PDF), str(tmp_path), from_bronze=True)
 
-    assert len(records) == 12
-    df = pd.read_csv(output_path)
-    assert len(df) == 12
-    assert "ma_nhiem_vu" in df.columns
+    assert first == again
+    assert len(again) == 12
