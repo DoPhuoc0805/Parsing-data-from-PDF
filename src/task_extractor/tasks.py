@@ -141,12 +141,26 @@ def _is_group_label(row: dict, profile: Profile, use_deliverable: bool) -> bool:
 
 
 def detect_profile(rows: list, candidates) -> Profile:
-    """Chọn profile đọc được nhiều dòng nhất trong các ứng viên của định dạng file.
+    """Chọn profile có bằng chứng phân cấp rõ nhất, trong TOÀN BỘ profile đã khai.
 
-    Mỗi kiểu mã hóa dùng một cột mã khác nhau, nên profile sai gần như không
-    đọc nổi dòng nào — số dòng dựng được path là tín hiệu đủ rõ để tự chọn.
-    Khi không ứng viên nào đọc được (văn bản không có cột mã phân cấp), giữ
-    ứng viên đầu tiên để mọi dòng đi qua nguyên trạng thay vì bị loại.
+    Kiểu mã hóa là đặc trưng của cách văn bản đánh mã, không phải của định
+    dạng file chứa nó — một PDF vẫn có thể dùng mã kiểu "dotted_code" nếu
+    người soạn làm bảng theo cùng quy ước với 1 file Excel rồi xuất ra PDF.
+    Vì vậy mọi profile đều được thử cho mọi file, không giới hạn theo đuôi.
+
+    Điểm dựa trên **số mã có từ 2 đoạn trở lên**, không phải tổng số dòng đọc
+    được mã: 2 văn bản có thể đều dùng tên cột "TT" cho 2 việc khác hẳn nhau
+    (số thứ tự chạy phẳng ở PDF, mã phân cấp thật ở Excel) — cả hai đều ánh
+    xạ về cùng field "tt" nên đọc "được" như nhau, nhưng chỉ mã phân cấp thật
+    mới sinh ra được path nhiều đoạn. Một cột số thứ tự phẳng (1, 2, 3...)
+    không dấu phân cách sẽ luôn cho điểm 0 ở đây, dù profile "đọc" được nó.
+
+    Khi không ứng viên nào có bằng chứng phân cấp (văn bản không có cột mã
+    phân cấp nào, hoặc chỉ có cột số thứ tự chạy phẳng như CV6582), giữ ứng
+    viên đầu tiên để mọi dòng đi qua nguyên trạng thay vì bị loại — KHÔNG lấy
+    tổng số dòng đọc được làm tiêu chí phụ, vì một cột số thứ tự phẳng luôn
+    "đọc được" toàn bộ dòng dưới bất kỳ profile mã tuyệt đối nào mà không hề
+    có ý nghĩa phân cấp.
     """
     candidates = list(candidates)
     if not candidates:
@@ -155,7 +169,8 @@ def detect_profile(rows: list, candidates) -> Profile:
     best = candidates[0]
     best_score = 0
     for profile in candidates:
-        score = sum(1 for path in _parse_paths(rows, profile) if path)
+        paths = _parse_paths(rows, profile)
+        score = sum(1 for path in paths if path and len(path) > 1)
         if score > best_score:
             best, best_score = profile, score
     return best

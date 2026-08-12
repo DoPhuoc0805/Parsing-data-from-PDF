@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from .profiles import PROFILES_BY_SUFFIX
+from .profiles import ALL_PROFILES
 from .read_excel import read_excel
 from .read_pdf import read_pdf
 from .tasks import build_tasks, detect_profile
@@ -49,7 +49,6 @@ def read_source(input_path: str) -> list:
 def run_pipeline(input_path: str, data_dir: str = "data", from_bronze: bool = False) -> list:
     """Chạy toàn bộ pipeline, ghi ra cả 3 tầng, trả về danh sách nhiệm vụ (silver)."""
     name = Path(input_path).stem
-    suffix = Path(input_path).suffix.lower()
 
     if from_bronze:
         with open(_bronze_path(data_dir, name), encoding="utf-8") as f:
@@ -58,7 +57,7 @@ def run_pipeline(input_path: str, data_dir: str = "data", from_bronze: bool = Fa
         rows = read_source(input_path)
         write_json(rows, _bronze_path(data_dir, name))
 
-    profile = detect_profile(rows, PROFILES_BY_SUFFIX[suffix])
+    profile = detect_profile(rows, ALL_PROFILES)
     tasks = build_tasks(rows, profile)
 
     # Nguồn gốc chỉ tầng này biết; cần cho việc truy vết và để AI agent trích dẫn.

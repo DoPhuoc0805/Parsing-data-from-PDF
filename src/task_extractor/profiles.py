@@ -85,9 +85,8 @@ DECIMAL_INDEX = Profile(
     drop_fields=("tt",),
 )
 
-# Ứng viên profile theo định dạng file. PDF chỉ có 1 kiểu mã nên không cần dò.
-PROFILES_BY_SUFFIX = {
-    ".pdf": (NUMBER_LETTER,),
-    ".xlsx": (DOTTED_CODE, DECIMAL_INDEX),
-    ".xlsm": (DOTTED_CODE, DECIMAL_INDEX),
-}
+# Mọi profile đều là ứng viên cho mọi định dạng file: kiểu mã hóa (số+chữ cái,
+# mã có tiền tố, số thập phân) là đặc trưng của CÁCH văn bản đánh mã, không
+# phải của định dạng file chứa nó — một PDF vẫn có thể dùng mã kiểu dotted_code
+# nếu người soạn làm bảng trong Word/Excel theo cùng quy ước rồi xuất ra PDF.
+ALL_PROFILES = (NUMBER_LETTER, DOTTED_CODE, DECIMAL_INDEX)

@@ -48,7 +48,7 @@ Thêm một loại văn bản mới chỉ cần thêm một mục cấu hình tr
 | `dotted_code` | Mã có tiền tố, phân cấp bằng dấu chấm | `KH20_TT_N01.1.1` |
 | `decimal_index` | Số thập phân, đuôi `.0` là chính nó | `13.0` → `13.5` |
 
-Profile được chọn tự động bằng cách thử đọc: kiểu mã sai gần như không đọc nổi dòng nào.
+Profile được chọn tự động bằng cách thử đọc — **mọi profile được thử cho mọi định dạng file**, không giới hạn theo đuôi file (`.pdf`/`.xlsx`), vì kiểu mã hóa là đặc trưng của cách văn bản đánh mã, không phải của định dạng file chứa nó. Một PDF vẫn được nhận diện đúng nếu nó dùng mã kiểu `dotted_code`. Tiêu chí chọn dựa trên **số mã có từ 2 đoạn trở lên** (bằng chứng phân cấp thật), không phải tổng số dòng đọc được — để tránh nhầm một cột số thứ tự chạy phẳng (vd cột "TT" đếm 1, 2, 3...) với mã phân cấp thật chỉ vì hai cột tình cờ trùng tên chuẩn.
 
 **Dòng nào là nhãn nhóm, dòng nào là nhiệm vụ thật?** Dòng có nhiệm vụ con nằm dưới bị coi là nhãn nhóm khi: profile khai không giữ dòng cha (PDF), *hoặc* dòng đó không giao việc cho đơn vị nào, *hoặc* văn bản có cột sản phẩm đầu ra mà dòng đó bỏ trống — vì khi đó nó là tiêu đề chương mục ("phần này thuộc trách nhiệm ai") chứ không phải một việc cụ thể. Luật cuối chỉ chạy khi cột sản phẩm **thực sự tồn tại** trong văn bản đang đọc; vắng cột thì không phán xét bằng một cột không có mặt.
 

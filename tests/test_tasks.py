@@ -3,12 +3,7 @@
 import logging
 from pathlib import Path
 
-from src.task_extractor.profiles import (
-    DECIMAL_INDEX,
-    DOTTED_CODE,
-    NUMBER_LETTER,
-    PROFILES_BY_SUFFIX,
-)
+from src.task_extractor.profiles import ALL_PROFILES, DECIMAL_INDEX, DOTTED_CODE, NUMBER_LETTER
 from src.task_extractor.read_excel import read_excel
 from src.task_extractor.read_pdf import read_pdf
 from src.task_extractor.tasks import build_tasks, detect_profile
@@ -135,10 +130,12 @@ def test_cv6582_wrapped_unit_names_are_rejoined():
 # --------------------------------------------------------------- chọn profile
 def _detect(path):
     reader = read_excel if path.suffix == ".xlsx" else read_pdf
-    return detect_profile(reader(str(path)), PROFILES_BY_SUFFIX[path.suffix])
+    return detect_profile(reader(str(path)), ALL_PROFILES)
 
 
-def test_profile_is_detected_from_the_code_column_in_use():
+def test_profile_is_detected_from_the_code_column_in_use_not_the_file_extension():
+    # Moi profile duoc thu cho MOI dinh dang file - kieu ma hoa la dac trung
+    # cua van ban, khong phai cua dinh dang file chua no.
     assert _detect(TEST2_XLSX) is DOTTED_CODE
     assert _detect(TEST3_XLSX) is DECIMAL_INDEX
     assert _detect(KH277_PDF) is NUMBER_LETTER
@@ -147,6 +144,36 @@ def test_profile_is_detected_from_the_code_column_in_use():
 def test_document_without_any_code_column_still_gets_a_profile():
     # CV6582 khong co cot ma phan cap nao -> moi dong di qua nguyen trang.
     assert _detect(CV6582_PDF) is NUMBER_LETTER
+
+
+def test_flat_running_number_column_is_not_mistaken_for_a_hierarchical_code():
+    # CV6582 co cot "tt" la so thu tu chay PHANG (1..12), cung ten field chuan
+    # voi cot "TT" cua decimal_index (test_3) nhung mang y nghia khac han.
+    # decimal_index van "doc duoc" ca 12 gia tri nay (khong co dau cham nen
+    # moi gia tri thanh 1 path 1 doan hop le) - neu chon profile chi dua vao
+    # tong so dong doc duoc, no se thang nham number_letter (dang diem 0 vi
+    # CV6582 khong co cot chi_tiet). Phai dua vao bang chung phan cap THAT
+    # (path nhieu doan) thi moi chon dung.
+    rows = read_pdf(str(CV6582_PDF))
+    assert detect_profile(rows, ALL_PROFILES) is NUMBER_LETTER
+
+
+def test_pdf_with_a_dotted_hierarchical_code_column_is_detected_correctly():
+    # Mo phong 1 file PDF co cau truc bang giong test_2.xlsx (cot ma phan cap
+    # co tien to, doc qua fields.py thanh "ma_goc"). Truoc day pipeline chi
+    # thu dung 1 profile theo duoi file .pdf nen se khong bao gio nhan ra
+    # duoc kieu ma nay du doc dung cot - gio phai tu chon dung profile.
+    rows = [
+        {"ma_goc": "KH20_TT_N01", "ten_nhiem_vu": "Nhom lon", "don_vi_chu_tri": None},
+        {"ma_goc": "KH20_TT_N01.1", "ten_nhiem_vu": "Viec 1", "don_vi_chu_tri": "Sở A"},
+        {"ma_goc": "KH20_TT_N01.2", "ten_nhiem_vu": "Viec 2", "don_vi_chu_tri": "Sở A"},
+    ]
+
+    profile = detect_profile(rows, ALL_PROFILES)
+    assert profile is DOTTED_CODE
+
+    tasks = build_tasks(rows, profile)
+    assert {t["ma_nhiem_vu"] for t in tasks} == {"KH20_TT_N01.1", "KH20_TT_N01.2"}
 
 
 # --------------------------------------------------------------- Excel: mã phân cấp
